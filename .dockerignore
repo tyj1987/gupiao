@@ -1,0 +1,76 @@
+# Docker镜像忽略文件
+
+# Python相关
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 虚拟环境
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 操作系统
+.DS_Store
+Thumbs.db
+
+# 日志文件
+*.log
+
+# 临时文件
+*.tmp
+*.bak
+
+# Git
+.git/
+.gitignore
+
+# 数据文件
+*.csv
+*.xlsx
+*.json
+
+# 缓存文件
+cache/
+.cache/
+
+# 测试覆盖率
+.coverage
+htmlcov/
+
+# 文档
+docs/
+*.md
+!README.md
+
+# 部署相关
+deploy.sh
+manage.sh
+check_environment.sh
+*.tar.gz
+
+# 配置文件（敏感信息）
+config/api_keys.py

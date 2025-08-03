@@ -1,0 +1,40 @@
+[global]
+# 开发模式设置
+developmentMode = false
+
+[logger]
+# 日志级别
+level = "error"
+
+[client]
+# 客户端设置
+gatherUsageStats = false
+showErrorDetails = false
+
+[browser]
+# 浏览器设置
+gatherUsageStats = false
+serverAddress = "localhost"
+serverPort = 8501
+
+[server]
+# 服务器设置
+address = "0.0.0.0"
+port = 8501
+headless = true
+runOnSave = false
+allowRunOnSave = false
+# 禁用文件监视
+fileWatcherType = "none"
+
+[theme]
+# 主题设置
+primaryColor = "#FF6B6B"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F0F2F6"
+textColor = "#262730"
+
+[deprecation]
+# 禁用弃用警告
+showfileUploaderEncoding = false
+showPyplotGlobalUse = false

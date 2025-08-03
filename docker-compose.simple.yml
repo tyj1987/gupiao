@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  # 股票分析系统主服务（简化版）
+  gupiao:
+    build: .
+    container_name: gupiao_app
+    ports:
+      - "8501:8501"
+    volumes:
+      # 配置文件挂载
+      - ./config:/app/config
+      # 缓存目录挂载
+      - gupiao_cache:/tmp/stock_cache
+    environment:
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      - TZ=Asia/Shanghai
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  gupiao_cache:
+    driver: local
