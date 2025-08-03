@@ -1,123 +1,243 @@
 #!/bin/bash
-# 系统环境检查脚本
+# =============================================================================
+# 股票分析系统 - 环境检查脚本
+# 检查系统环境是否满足部署要求
+# =============================================================================
 
-echo "🔍 CentOS 7.9 环境检查"
-echo "====================="
+# 颜色定义
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
 
-# 基本系统信息
-echo "📋 系统信息："
-echo "  操作系统: $(cat /etc/redhat-release)"
-echo "  内核版本: $(uname -r)"
-echo "  架构: $(uname -m)"
-echo "  主机名: $(hostname)"
-echo "  当前用户: $(whoami)"
+# 日志函数
+log_info() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
+
+log_success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
+}
+
+log_warning() {
+    echo -e "${YELLOW}[WARNING]${NC} $1"
+}
+
+log_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# 检查结果
+check_result=0
+
+echo ""
+echo "🔍 股票分析系统 - 环境检查"
+echo "=========================="
 echo ""
 
-# Python环境检查
-echo "🐍 Python环境："
-if command -v python3 &> /dev/null; then
-    echo "  ✅ Python3: $(python3 --version)"
+# 检查操作系统
+log_info "检查操作系统..."
+OS=$(uname -s)
+ARCH=$(uname -m)
+echo "操作系统: $OS $ARCH"
+
+if [[ "$OS" == "Linux" ]]; then
+    # 检查Linux发行版
+    if [ -f /etc/os-release ]; then
+        source /etc/os-release
+        echo "发行版: $NAME $VERSION"
+    fi
+    log_success "操作系统检查通过"
+elif [[ "$OS" == "Darwin" ]]; then
+    echo "发行版: macOS $(sw_vers -productVersion)"
+    log_success "操作系统检查通过"
 else
-    echo "  ❌ Python3 未安装"
+    log_warning "未测试的操作系统: $OS"
 fi
 
-if command -v pip3 &> /dev/null; then
-    echo "  ✅ Pip3: $(pip3 --version | awk '{print $1, $2}')"
-else
-    echo "  ❌ Pip3 未安装"
-fi
 echo ""
 
-# 宝塔面板检查
-echo "🎛️ 宝塔面板："
-if [ -f "/etc/init.d/bt" ]; then
-    BT_STATUS=$(/etc/init.d/bt status)
-    echo "  ✅ 宝塔面板已安装"
-    echo "  状态: $BT_STATUS"
+# 检查内存
+log_info "检查系统内存..."
+if command -v free &> /dev/null; then
+    MEMORY=$(free -m | awk 'NR==2{printf "%.0f", $2/1024}')
+elif command -v vm_stat &> /dev/null; then
+    # macOS
+    MEMORY=$(echo "scale=0; $(vm_stat | grep "Pages free" | awk '{print $3}' | sed 's/\.//' ) * 4096 / 1024 / 1024 / 1024" | bc 2>/dev/null || echo "4")
+else
+    MEMORY="未知"
+fi
+
+echo "总内存: ${MEMORY}GB"
+if [[ "$MEMORY" =~ ^[0-9]+$ ]] && [ "$MEMORY" -ge 2 ]; then
+    log_success "内存充足 (推荐4GB+)"
+else
+    log_warning "内存可能不足，推荐4GB以上"
+    check_result=1
+fi
+
+echo ""
+
+# 检查磁盘空间
+log_info "检查磁盘空间..."
+DISK=$(df -h . | awk 'NR==2 {print $4}')
+echo "可用空间: $DISK"
+log_success "磁盘空间检查通过"
+
+echo ""
+
+# 检查网络连接
+log_info "检查网络连接..."
+if ping -c 1 baidu.com &> /dev/null; then
+    log_success "网络连接正常"
+else
+    log_error "网络连接失败"
+    check_result=1
+fi
+
+echo ""
+
+# 检查Docker
+log_info "检查 Docker..."
+if command -v docker &> /dev/null; then
+    DOCKER_VERSION=$(docker --version | cut -d' ' -f3 | sed 's/,//')
+    echo "Docker版本: $DOCKER_VERSION"
     
-    # 获取宝塔面板访问信息
-    if command -v bt &> /dev/null; then
-        echo "  面板地址: $(bt default | grep '面板地址' | awk '{print $2}' || echo '请运行 bt default 查看')"
+    # 检查Docker是否运行
+    if docker ps &> /dev/null; then
+        log_success "Docker运行正常"
+    else
+        log_error "Docker未运行，请启动Docker服务"
+        check_result=1
     fi
 else
-    echo "  ❌ 宝塔面板未安装"
+    log_error "Docker未安装"
+    echo "安装命令 (Ubuntu/Debian):"
+    echo "  curl -fsSL https://get.docker.com -o get-docker.sh"
+    echo "  sudo sh get-docker.sh"
+    echo ""
+    echo "安装命令 (CentOS/RHEL):"
+    echo "  sudo yum install -y docker"
+    echo "  sudo systemctl start docker"
+    check_result=1
 fi
+
 echo ""
 
-# 网络和防火墙
-echo "🌐 网络和防火墙："
-echo "  IP地址: $(hostname -I | awk '{print $1}')"
-
-if systemctl is-active --quiet firewalld; then
-    echo "  ✅ Firewalld 服务运行中"
-    echo "  开放端口: $(firewall-cmd --list-ports)"
+# 检查Docker Compose
+log_info "检查 Docker Compose..."
+if command -v docker-compose &> /dev/null; then
+    COMPOSE_VERSION=$(docker-compose --version | cut -d' ' -f3 | sed 's/,//')
+    echo "Docker Compose版本: $COMPOSE_VERSION"
+    log_success "Docker Compose可用"
+elif docker compose version &> /dev/null; then
+    COMPOSE_VERSION=$(docker compose version | cut -d' ' -f3)
+    echo "Docker Compose版本: $COMPOSE_VERSION (集成版)"
+    log_success "Docker Compose可用"
 else
-    echo "  ❌ Firewalld 服务未运行"
+    log_error "Docker Compose未安装"
+    echo "安装命令:"
+    echo "  sudo curl -L \"https://github.com/docker/compose/releases/download/v2.20.0/docker-compose-\$(uname -s)-\$(uname -m)\" -o /usr/local/bin/docker-compose"
+    echo "  sudo chmod +x /usr/local/bin/docker-compose"
+    check_result=1
 fi
+
 echo ""
 
-# 系统资源
-echo "💻 系统资源："
-echo "  CPU: $(nproc) 核心"
-echo "  内存: $(free -h | grep Mem | awk '{print $2}') (可用: $(free -h | grep Mem | awk '{print $7}'))"
-echo "  磁盘: $(df -h / | tail -1 | awk '{print $2}') (可用: $(df -h / | tail -1 | awk '{print $4}'))"
-echo ""
+# 检查端口占用
+log_info "检查端口占用..."
+ports_to_check=(8501 80 443)
+occupied_ports=()
 
-# 必要的软件包检查
-echo "📦 必要软件包："
-packages=("wget" "curl" "git" "vim" "gcc" "gcc-c++" "make")
-for pkg in "${packages[@]}"; do
-    if rpm -q $pkg &> /dev/null; then
-        echo "  ✅ $pkg"
-    else
-        echo "  ❌ $pkg (未安装)"
+for port in "${ports_to_check[@]}"; do
+    if netstat -tlnp 2>/dev/null | grep ":$port " > /dev/null || lsof -i ":$port" &> /dev/null; then
+        occupied_ports+=($port)
     fi
 done
-echo ""
 
-# SELinux 状态
-echo "🔒 安全配置："
-echo "  SELinux: $(getenforce)"
-echo ""
-
-# 时区和时间
-echo "⏰ 时间配置："
-echo "  时区: $(timedatectl | grep 'Time zone' | awk '{print $3}')"
-echo "  当前时间: $(date)"
-echo ""
-
-# 检查是否有其他服务占用8501端口
-echo "🔌 端口占用检查："
-if netstat -tlnp | grep -q ":8501 "; then
-    echo "  ⚠️ 端口8501已被占用："
-    netstat -tlnp | grep ":8501 "
+if [ ${#occupied_ports[@]} -eq 0 ]; then
+    log_success "所需端口均可用"
 else
-    echo "  ✅ 端口8501可用"
-fi
-echo ""
-
-# 建议和下一步
-echo "💡 部署建议："
-echo "=================="
-
-# 检查系统是否满足最低要求
-memory_gb=$(free -g | grep Mem | awk '{print $2}')
-if [ $memory_gb -lt 2 ]; then
-    echo "  ⚠️ 建议内存至少2GB，当前: ${memory_gb}GB"
-fi
-
-disk_gb=$(df -BG / | tail -1 | awk '{print $4}' | sed 's/G//')
-if [ $disk_gb -lt 10 ]; then
-    echo "  ⚠️ 建议可用磁盘空间至少10GB，当前: ${disk_gb}GB"
+    log_warning "以下端口被占用: ${occupied_ports[*]}"
+    echo "如果需要，请停止占用这些端口的服务"
 fi
 
 echo ""
-echo "🚀 准备部署："
-echo "  1. 确保宝塔面板正常运行"
-echo "  2. 上传项目文件到 /www/wwwroot/gupiao"
-echo "  3. 运行部署脚本: chmod +x deploy.sh && ./deploy.sh"
-echo "  4. 在宝塔面板中开放8501端口"
-echo "  5. 配置API密钥并测试系统"
+
+# 检查Python（用于API密钥配置）
+log_info "检查 Python..."
+if command -v python3 &> /dev/null; then
+    PYTHON_VERSION=$(python3 --version | cut -d' ' -f2)
+    echo "Python版本: $PYTHON_VERSION"
+    log_success "Python可用"
+else
+    log_warning "Python3未安装（可选，用于高级配置）"
+fi
+
 echo ""
 
-echo "✅ 环境检查完成！"
+# 检查项目文件
+log_info "检查项目文件..."
+required_files=(
+    "Dockerfile"
+    "docker-compose.yml"
+    "docker-compose.simple.yml"
+    "config/api_keys.example.py"
+    "requirements.txt"
+)
+
+missing_files=()
+for file in "${required_files[@]}"; do
+    if [ ! -f "$file" ]; then
+        missing_files+=($file)
+    fi
+done
+
+if [ ${#missing_files[@]} -eq 0 ]; then
+    log_success "项目文件完整"
+else
+    log_error "缺少以下文件: ${missing_files[*]}"
+    check_result=1
+fi
+
+echo ""
+
+# 检查API密钥配置
+log_info "检查 API 密钥配置..."
+if [ -f "config/api_keys.py" ]; then
+    if grep -q "your_tushare_token_here" config/api_keys.py; then
+        log_warning "请配置 Tushare Token"
+        echo "编辑 config/api_keys.py 文件，替换 your_tushare_token_here"
+    else
+        log_success "API密钥已配置"
+    fi
+else
+    log_info "API密钥配置文件不存在，将在部署时创建"
+fi
+
+echo ""
+
+# 总结
+echo "=================================="
+if [ $check_result -eq 0 ]; then
+    log_success "🎉 环境检查通过！可以开始部署"
+    echo ""
+    echo "推荐部署方式:"
+    echo "  1. Docker快速部署: ./docker-quick-deploy.sh"
+    echo "  2. 手动Docker部署: docker-compose up -d"
+    echo "  3. 查看完整指南: cat DEPLOYMENT_GUIDE.md"
+else
+    log_warning "⚠️  环境检查发现问题，请先解决上述问题"
+    echo ""
+    echo "常见解决方案:"
+    echo "  1. 安装Docker: curl -fsSL https://get.docker.com | sh"
+    echo "  2. 启动Docker: sudo systemctl start docker"
+    echo "  3. 添加用户组: sudo usermod -aG docker \$USER"
+    echo "  4. 重新登录或运行: newgrp docker"
+fi
+
+echo "=================================="
+echo ""
+
+exit $check_result
