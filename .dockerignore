@@ -1,4 +1,11 @@
-# Docker镜像忽略文件
+# =============================================
+# 股票AI分析系统 Docker镜像忽略文件
+# =============================================
+
+# Git相关
+.git/
+.gitignore
+.github/
 
 # Python相关
 __pycache__/
@@ -21,50 +28,100 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-
-# 虚拟环境
-venv/
-env/
-ENV/
-
-# IDE
+# IDE和编辑器
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
 
-# 操作系统
+# 操作系统文件
 .DS_Store
 Thumbs.db
+desktop.ini
+
+# 临时文件和备份
+*.tmp
+*.bak
+*.old
+*.swp
+*.swo
+*~
+.~*
 
 # 日志文件
 *.log
+logs/
+log/
 
-# 临时文件
-*.tmp
-*.bak
-
-# Git
-.git/
-.gitignore
-
-# 数据文件
+# 缓存和数据文件  
+cache/
+.cache/
+data/
+exports/
+models/
 *.csv
 *.xlsx
 *.json
+*.db
+*.sqlite
+*.pickle
+*.pkl
 
-# 缓存文件
-cache/
-.cache/
-
-# 测试覆盖率
+# 测试和覆盖率
 .coverage
+.pytest_cache/
 htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+.hypothesis/
+.junit/
 
-# 文档
+# 文档和README（保留README.md）
 docs/
 *.md
 !README.md
+!CHANGELOG.md
+
+# 部署相关
+deploy/
+deployment/
+scripts/
+*.tar.gz
+*.zip
+
+# 开发工具文件
+.env.local
+.env.development
+.env.test
+.env.production
+.flaskenv
+
+# 配置文件（敏感信息）
+config/api_keys.py
+.streamlit/secrets.toml
+
+# 存档文件
+archive/
+
+# 测试文件
+*test*.py
+functional_test.py
+local_test.py
+
+# 管理脚本
+*.sh
+!healthcheck.sh
+
+# Docker相关
+docker-compose*.yml
+Dockerfile*
+.dockerignore
+
+# Nginx配置
+nginx.conf
 
 # 部署相关
 deploy.sh

@@ -1,68 +1,165 @@
+# =============================================
+# 股票AI分析系统 Docker Compose 配置
+# 作者: tyj1987 <tuoyongjun1987@qq.com>
+# 版本: 2.1.0 
+# =============================================
+
 version: '3.8'
 
 services:
+  # 主应用服务
   gupiao:
-    build: .
+    build: 
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BUILDTIME: "${BUILD_TIME:-$(date -u +'%Y-%m-%dT%H:%M:%SZ')}"
+        VERSION: "${VERSION:-latest}"
+        REVISION: "${GITHUB_SHA:-$(git rev-parse HEAD)}"
+    image: tuoyongjun1987/gupiao:latest
     container_name: gupiao_app
+    hostname: gupiao-app
     ports:
-      - "8501:8501"
+      - "${GUPIAO_PORT:-8501}:8501"
     volumes:
-      # 配置文件挂载（可以在宿主机修改配置）
-      - ./config:/app/config
-      # 缓存目录挂载（持久化缓存数据）
-      - gupiao_cache:/tmp/stock_cache
-      # 日志目录挂载
-      - gupiao_logs:/var/log
+      # 配置文件（只读挂载）
+      - ./config:/app/config:ro
+      # 数据持久化
+      - gupiao_data:/app/data
+      - gupiao_cache:/app/cache
+      - gupiao_logs:/app/logs
+      - gupiao_models:/app/models
     environment:
       - PYTHONPATH=/app
       - PYTHONUNBUFFERED=1
       - TZ=Asia/Shanghai
+      - STREAMLIT_SERVER_PORT=8501
+      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
+      - STREAMLIT_SERVER_HEADLESS=true
+      - STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
+      # Redis连接（如果启用）
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      test: ["CMD-SHELL", "/app/healthcheck.sh"]
       interval: 30s
-      timeout: 10s
+      timeout: 15s
       retries: 3
-      start_period: 40s
+      start_period: 60s
+    depends_on:
+      redis:
+        condition: service_healthy
     networks:
       - gupiao_network
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+        reservations:
+          memory: 512M
+          cpus: '0.25'
 
-  # Nginx反向代理（可选）
+  # Nginx反向代理服务
   nginx:
     image: nginx:alpine
     container_name: gupiao_nginx
+    hostname: gupiao-nginx
     ports:
-      - "80:80"
-      - "443:443"
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
     volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf
-      - ./ssl:/etc/nginx/ssl  # SSL证书目录（可选）
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro  # SSL证书目录
+      - gupiao_logs:/var/log/nginx
     depends_on:
-      - gupiao
+      gupiao:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - gupiao_network
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    profiles:
+      - nginx
 
-  # Redis缓存（可选，用于高性能缓存）
+  # Redis缓存服务
   redis:
-    image: redis:alpine
+    image: redis:7-alpine
     container_name: gupiao_redis
+    hostname: gupiao-redis
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     volumes:
       - gupiao_redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
     restart: unless-stopped
     networks:
       - gupiao_network
-
-volumes:
-  gupiao_cache:
-    driver: local
-  gupiao_logs:
-    driver: local
-  gupiao_redis_data:
-    driver: local
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.2'
 
 networks:
   gupiao_network:
+    name: gupiao_network
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  # 应用数据卷
+  gupiao_data:
+    name: gupiao_data
+    driver: local
+  
+  # 缓存数据卷
+  gupiao_cache:
+    name: gupiao_cache
+    driver: local
+    
+  # 日志数据卷
+  gupiao_logs:
+    name: gupiao_logs
+    driver: local
+    
+  # 模型数据卷
+  gupiao_models:
+    name: gupiao_models
+    driver: local
+    
+  # Redis数据卷
+  gupiao_redis_data:
+    name: gupiao_redis_data
+    driver: local
+
+# ==============================================================================
+# 使用说明:
+# 1. 启动完整服务栈: docker-compose up -d
+# 2. 仅启动核心应用: docker-compose up -d gupiao
+# 3. 启动包含Nginx: docker-compose --profile nginx up -d
+# 4. 查看日志: docker-compose logs -f
+# 5. 停止服务: docker-compose down
+# 6. 清理数据: docker-compose down -v
+# 
+# 环境变量配置 (.env 文件):
+# GUPIAO_PORT=8501
+# HTTP_PORT=80
+# HTTPS_PORT=443
+# REDIS_PORT=6379
+# BUILD_TIME=2025-01-01T00:00:00Z
+# VERSION=latest
+# ==============================================================================

@@ -10,7 +10,7 @@ scipy==1.11.4
 
 # 数据获取
 tushare==1.2.89
-akshare==1.11.80
+akshare==1.17.29
 requests==2.31.0
 yfinance==0.2.22
 

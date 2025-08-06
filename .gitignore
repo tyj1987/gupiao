@@ -19,68 +19,8 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST
 
-# PyInstaller
-*.manifest
-*.spec
-
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-.hypothesis/
-.pytest_cache/
-
-# Translations
-*.mo
-*.pot
-
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-
-# Flask stuff:
-instance/
-.webassets-cache
-
-# Scrapy stuff:
-.scrapy
-
-# Sphinx documentation
-docs/_build/
-
-# PyBuilder
-target/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# IPython
-profile_default/
-ipython_config.py
-
-# pyenv
-.python-version
-
-# celery beat schedule file
-celerybeat-schedule
-
-# SageMath parsed files
-*.sage.py
-
-# Environments
+# 环境文件
 .env
 .venv
 env/
@@ -89,123 +29,42 @@ ENV/
 env.bak/
 venv.bak/
 
-# Spyder project settings
-.spyderproject
-.spyproject
-
-# Rope project settings
-.ropeproject
-
-# mkdocs documentation
-/site
-
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Pyre type checker
-.pyre/
-
-# API Keys and Secrets
-config/api_keys.py
-*.key
-*.pem
-secrets.json
-
-# Data files
-data/*.csv
-data/*.json
-data/*.xlsx
-data/*.parquet
-*.db
-*.sqlite
-
-# Cache directories
-cache/
-.cache/
-__pycache__/
-.pytest_cache/
-/tmp/
-temp/
-
-# Log files
-*.log
-logs/
-*.out
-
-# IDE files
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# OS generated files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
+# 日志文件
+*.log
+logs/
 
-# Docker
-.docker/
-docker-compose.override.yml
+# 数据库文件
+*.db
+*.sqlite
+
+# 缓存文件
+cache/
+*.cache
+
+# 配置文件（包含敏感信息）
+config/api_keys.py
+
+# 临时文件
+tmp/
+temp/
+*.tmp
+
+# 系统文件
+.DS_Store
+Thumbs.db
+*:Zone.Identifier
+
+# 测试文件
+.coverage
+htmlcov/
+.pytest_cache/
 
 # Streamlit
 .streamlit/secrets.toml
-
-# Backup files
-*.bak
-*.backup
-*~
-
-# Temporary files
-*.tmp
-*.temp
-
-# Package files
-*.tar.gz
-*.zip
-*.rar
-
-# Node modules (if any)
-node_modules/
-
-# Coverage reports
-htmlcov/
-.coverage
-
-# Local configuration
-local_config.py
-local_settings.py
-
-# Stock cache
-/tmp/stock_cache/
-stock_cache/
-
-# Exports
-exports/*.csv
-exports/*.json
-exports/*.xlsx
-
-# Models
-models/*.pkl
-models/*.joblib
-models/*.h5
-
-# Archive (but keep structure)
-archive/tests/*.py
-archive/docs/*.md
-
-# Deployment artifacts
-deployment/
-*.tar.gz
-gupiao_production_deploy.tar.gz
-
-# Test files
-test_*.py
-*_test.py
-tests/

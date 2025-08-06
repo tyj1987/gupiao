@@ -75,19 +75,19 @@ st.markdown("""
         margin: 1rem 0;
     }
     .buy-signal {
-        background-color: #d4edda;
-        border-left: 4px solid #28a745;
+        background-color: #ffe6e6;
+        border-left: 4px solid #ff4d4d;
     }
     .sell-signal {
-        background-color: #f8d7da;
-        border-left: 4px solid #dc3545;
+        background-color: #e6ffe6;
+        border-left: 4px solid #00cc00;
     }
     .hold-signal {
         background-color: #fff3cd;
         border-left: 4px solid #ffc107;
     }
     .risk-low {
-        color: #28a745;
+        color: #00cc00;
         font-weight: bold;
     }
     .risk-medium {
@@ -95,8 +95,18 @@ st.markdown("""
         font-weight: bold;
     }
     .risk-high {
-        color: #dc3545;
+        color: #ff4d4d;
         font-weight: bold;
+    }
+    /* 中国股市颜色习惯：涨红跌绿 */
+    .price-up {
+        color: #ff4d4d !important;
+    }
+    .price-down {
+        color: #00cc00 !important;
+    }
+    .price-neutral {
+        color: #666666 !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -136,8 +146,10 @@ def get_cached_analysis(symbol, period):
     """获取缓存的分析结果"""
     if not MODULES_AVAILABLE:
         # 返回模拟分析结果
+        score = np.random.randint(60, 95)
+        level = 'bullish' if score >= 80 else 'bearish' if score <= 40 else 'neutral'
         return {
-            'overall_score': np.random.randint(60, 95),
+            'overall_score': {'score': score, 'level': level},
             'recommendation': np.random.choice(['买入', '持有', '卖出']),
             'confidence': np.random.uniform(60, 95),
             'reason': '基于技术面和基本面综合分析（模拟数据）',
@@ -253,7 +265,7 @@ def create_candlestick_chart(stock_data, technical_indicators=None):
         row_heights=[0.6, 0.2, 0.2]
     )
     
-    # K线图
+    # K线图 - 中国股市习惯：涨红跌绿
     fig.add_trace(
         go.Candlestick(
             x=stock_data.index,
@@ -261,7 +273,9 @@ def create_candlestick_chart(stock_data, technical_indicators=None):
             high=stock_data['high'],
             low=stock_data['low'],
             close=stock_data['close'],
-            name="K线"
+            name="K线",
+            increasing=dict(line=dict(color='red'), fillcolor='red'),
+            decreasing=dict(line=dict(color='green'), fillcolor='green')
         ),
         row=1, col=1
     )
@@ -317,7 +331,7 @@ def create_candlestick_chart(stock_data, technical_indicators=None):
             row=3, col=1
         )
         
-        # RSI超买超卖线
+        # RSI超买超卖线 - 中国习惯：超买红色警戒，超卖绿色机会
         fig.add_hline(y=70, line_dash="dash", line_color="red", row=3, col=1)
         fig.add_hline(y=30, line_dash="dash", line_color="green", row=3, col=1)
     
@@ -390,11 +404,26 @@ def render_stock_analysis_page(symbol, period):
     price_change_pct = (price_change / prev_price) * 100 if prev_price != 0 else 0
     
     with col1:
+        # 中国股市习惯：涨红跌绿
+        if price_change > 0:
+            price_color = "red"
+            price_arrow = "↗"
+        elif price_change < 0:
+            price_color = "green"  
+            price_arrow = "↘"
+        else:
+            price_color = "gray"
+            price_arrow = "→"
+            
         st.metric(
             "最新价格",
             f"¥{latest_price:.2f}",
-            f"{price_change:+.2f} ({price_change_pct:+.2f}%)"
+            f"{price_arrow} {price_change:+.2f} ({price_change_pct:+.2f}%)"
         )
+        
+        # 使用自定义颜色显示涨跌
+        price_class = "price-up" if price_change > 0 else ("price-down" if price_change < 0 else "price-neutral")
+        st.markdown(f'<div class="{price_class}">涨跌: {price_change:+.2f} ({price_change_pct:+.2f}%)</div>', unsafe_allow_html=True)
     
     with col2:
         score = analysis_result.get('overall_score', {}).get('score', 0)
