@@ -80,55 +80,56 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
-  deploy-test:
-    name: 部署到测试服务器
-    runs-on: ubuntu-latest
-    needs: build
-    if: github.ref == 'refs/heads/main'
-    
-    steps:
-    - name: 部署到测试服务器
-      uses: appleboy/ssh-action@v1.0.0
-      with:
-        host: ddns.52trz.com
-        username: root
-        password: ${{ secrets.TEST_SERVER_PASSWORD }}
-        port: 22
-        script: |
-          # 停止现有容器
-          docker stop gupiao-app || true
-          docker rm gupiao-app || true
-          
-          # 清理旧镜像
-          docker image prune -f
-          
-          # 拉取最新镜像
-          docker pull ${{ env.DOCKER_IMAGE }}:latest
-          
-          # 启动新容器
-          docker run -d \
-            --name gupiao-app \
-            --restart unless-stopped \
-            -p 8501:8501 \
-            -e ENVIRONMENT=test \
-            ${{ env.DOCKER_IMAGE }}:latest
-          
-          # 等待应用启动
-          sleep 30
-          
-          # 健康检查
-          if curl -f http://localhost:8501/healthz; then
-            echo "✅ 测试服务器部署成功"
-            echo "🌐 访问地址: http://ddns.52trz.com:8501"
-          else
-            echo "❌ 测试服务器部署失败"
-            exit 1
-          fi
+  # 临时跳过测试服务器部署（网络环境限制）
+  # deploy-test:
+  #   name: 部署到测试服务器
+  #   runs-on: ubuntu-latest
+  #   needs: build
+  #   if: github.ref == 'refs/heads/main'
+  #   
+  #   steps:
+  #   - name: 部署到测试服务器
+  #     uses: appleboy/ssh-action@v1.0.0
+  #     with:
+  #       host: ddns.52trz.com
+  #       username: root
+  #       password: ${{ secrets.TEST_SERVER_PASSWORD }}
+  #       port: 22
+  #       script: |
+  #         # 停止现有容器
+  #         docker stop gupiao-app || true
+  #         docker rm gupiao-app || true
+  #         
+  #         # 清理旧镜像
+  #         docker image prune -f
+  #         
+  #         # 拉取最新镜像
+  #         docker pull ${{ env.DOCKER_IMAGE }}:latest
+  #         
+  #         # 启动新容器
+  #         docker run -d \
+  #           --name gupiao-app \
+  #           --restart unless-stopped \
+  #           -p 8501:8501 \
+  #           -e ENVIRONMENT=test \
+  #           ${{ env.DOCKER_IMAGE }}:latest
+  #         
+  #         # 等待应用启动
+  #         sleep 30
+  #         
+  #         # 健康检查
+  #         if curl -f http://localhost:8501/healthz; then
+  #           echo "✅ 测试服务器部署成功"
+  #           echo "🌐 访问地址: http://ddns.52trz.com:8501"
+  #         else
+  #           echo "❌ 测试服务器部署失败"
+  #           exit 1
+  #         fi
 
   deploy-production:
     name: 部署到生产服务器
     runs-on: ubuntu-latest
-    needs: [build, deploy-test]
+    needs: [build]
     if: github.ref == 'refs/heads/main'
     
     steps:
@@ -164,9 +165,9 @@ jobs:
           sleep 30
           
           # 健康检查
-          if curl -f http://localhost:8501/healthz; then
+          if curl -f http://localhost:8501/_stcore/health; then
             echo "✅ 生产服务器部署成功"
-            echo "🌐 访问地址: http://47.94.225.76"
+            echo "🌐 访问地址: http://47.94.225.76:8501"
           else
             echo "❌ 生产服务器部署失败"
             exit 1
