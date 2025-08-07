@@ -90,7 +90,7 @@ jobs:
     - name: 部署到测试服务器
       uses: appleboy/ssh-action@v1.0.0
       with:
-        host: 192.168.2.8
+        host: ddns.52trz.com
         username: root
         password: ${{ secrets.TEST_SERVER_PASSWORD }}
         port: 22
@@ -119,6 +119,7 @@ jobs:
           # 健康检查
           if curl -f http://localhost:8501/healthz; then
             echo "✅ 测试服务器部署成功"
+            echo "🌐 访问地址: http://ddns.52trz.com:8501"
           else
             echo "❌ 测试服务器部署失败"
             exit 1
@@ -129,7 +130,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build, deploy-test]
     if: github.ref == 'refs/heads/main'
-    environment: production
     
     steps:
     - name: 部署到生产服务器
@@ -187,7 +187,7 @@ jobs:
       run: |
         if [ "${{ needs.deploy-production.result }}" = "success" ]; then
           echo "🎉 部署成功！"
-          echo "📱 测试服务器: http://192.168.2.8:8501"
+          echo "📱 测试服务器: http://ddns.52trz.com:8501"
           echo "🌐 生产服务器: http://47.94.225.76:8501"
         else
           echo "❌ 部署失败，请检查日志"
