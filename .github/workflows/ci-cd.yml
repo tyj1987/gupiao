@@ -155,7 +155,6 @@ jobs:
             --name gupiao-app \
             --restart unless-stopped \
             -p 8501:8501 \
-            -p 80:8501 \
             -e ENVIRONMENT=production \
             -v /var/log/gupiao:/app/logs \
             ${{ env.DOCKER_IMAGE }}:latest
