@@ -241,7 +241,31 @@ docker-compose build --no-cache
 - **传统模式**: `journalctl -u stock-analysis`
 - **Docker模式**: `docker-compose logs`
 
-## 📞 支持联系
+## � 特别感谢
+
+本项目的成功离不开以下开源项目和数据提供商的支持：
+
+### 🎯 数据源提供商
+- **[Tushare Pro](https://tushare.pro/)** - 感谢Tushare团队提供专业的中国股票数据API服务
+- **[AKShare](https://akshare.akfamily.xyz/)** - 感谢AKFamily团队维护的优秀开源金融数据接口
+- **[Yahoo Finance](https://finance.yahoo.com/)** - 感谢Yahoo提供可靠的国际金融市场数据
+
+### 🛠️ 技术框架
+- **[Streamlit](https://streamlit.io/)** - 出色的Python Web应用框架
+- **[Pandas](https://pandas.pydata.org/)** - 强大的数据处理和分析库
+- **[Plotly](https://plotly.com/)** - 优秀的交互式图表库
+- **[Scikit-learn](https://scikit-learn.org/)** - 机器学习算法库
+- **[TA-Lib](https://ta-lib.org/)** - 技术分析指标计算库
+
+### 🐳 部署支持
+- **[Docker](https://www.docker.com/)** - 容器化部署解决方案
+- **[GitHub Actions](https://github.com/features/actions)** - CI/CD自动化部署
+- **[Docker Hub](https://hub.docker.com/)** - 镜像托管服务
+
+### 🌟 特别致谢
+感谢所有为开源社区贡献力量的开发者们，正是你们的无私奉献才让这样的项目成为可能！
+
+## �📞 支持联系
 
 如有问题请通过以下方式联系：
 - GitHub Issues

@@ -15,12 +15,22 @@ ENV STREAMLIT_SERVER_ADDRESS=0.0.0.0
 ENV STREAMLIT_SERVER_HEADLESS=true
 ENV STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
 
-# 安装系统依赖
+# 安装系统依赖（包含TA-Lib编译依赖）
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
     curl \
+    wget \
+    build-essential \
     && rm -rf /var/lib/apt/lists/*
+
+# 安装TA-Lib C库
+RUN wget http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz \
+    && tar -xzf ta-lib-0.4.0-src.tar.gz \
+    && cd ta-lib \
+    && ./configure --prefix=/usr \
+    && make && make install \
+    && cd .. && rm -rf ta-lib ta-lib-0.4.0-src.tar.gz
 
 # 复制最小化依赖文件
 COPY requirements_minimal_fixed.txt .
