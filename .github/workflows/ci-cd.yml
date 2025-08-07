@@ -24,6 +24,22 @@ jobs:
       with:
         python-version: '3.9'
         
+    - name: 安装系统依赖 (TA-Lib)
+      run: |
+        # 安装 TA-Lib C 库
+        sudo apt-get update
+        sudo apt-get install -y wget build-essential
+        
+        # 下载并编译 TA-Lib
+        cd /tmp
+        wget http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz
+        tar -xzf ta-lib-0.4.0-src.tar.gz
+        cd ta-lib/
+        ./configure --prefix=/usr
+        make
+        sudo make install
+        sudo ldconfig
+        
     - name: 缓存依赖
       uses: actions/cache@v3
       with:
