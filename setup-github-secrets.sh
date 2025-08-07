@@ -32,11 +32,15 @@ echo "$DOCKER_TOKEN" | gh secret set DOCKER_HUB_TOKEN --repo="$REPO_OWNER/$REPO_
 
 # 测试服务器密码
 echo "设置TEST_SERVER_PASSWORD..."
-echo "[您的测试服务器密码]" | gh secret set TEST_SERVER_PASSWORD --repo="$REPO_OWNER/$REPO_NAME"
+echo "请输入您的测试服务器密码:"
+read -s TEST_PASSWORD
+echo "$TEST_PASSWORD" | gh secret set TEST_SERVER_PASSWORD --repo="$REPO_OWNER/$REPO_NAME"
 
 # 生产服务器密码
 echo "设置PROD_SERVER_PASSWORD..."
-echo "[您的生产服务器密码]" | gh secret set PROD_SERVER_PASSWORD --repo="$REPO_OWNER/$REPO_NAME"
+echo "请输入您的生产服务器密码:"
+read -s PROD_PASSWORD
+echo "$PROD_PASSWORD" | gh secret set PROD_SERVER_PASSWORD --repo="$REPO_OWNER/$REPO_NAME"
 
 echo "✅ 所有Secrets配置完成！"
 
