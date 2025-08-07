@@ -6,7 +6,7 @@ streamlit==1.28.0
 
 # 数据处理核心
 pandas==1.5.3
-numpy==1.24.3
+numpy==1.23.5
 
 # 数据可视化核心
 plotly==5.17.0
