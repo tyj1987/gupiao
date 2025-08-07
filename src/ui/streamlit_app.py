@@ -292,6 +292,36 @@ def render_sidebar():
         - **实时推荐**: 动态股票推荐
         """)
         
+    elif page == "⚡ 自动交易":
+        st.sidebar.markdown("### 🤖 自动交易功能")
+        st.sidebar.markdown("""
+        - **📊 策略配置**: 保守型、平衡型、激进型三种策略
+        - **💰 资金管理**: 智能仓位控制和资金分配
+        - **🛡️ 风险控制**: 止损止盈、最大回撤控制
+        - **📈 回测验证**: 历史数据验证策略效果
+        - **⭐ 自选股池**: 基于自选股的智能交易
+        - **📊 实时监控**: 24/7交易状态和收益监控
+        """)
+        
+        st.sidebar.markdown("### ⚠️ 重要提醒")
+        st.sidebar.warning("""
+        🔴 **风险提示**
+        - 股市有风险，投资需谨慎
+        - 建议先使用模拟交易熟悉系统
+        - 实盘交易请根据个人风险承受能力操作
+        """)
+        
+        st.sidebar.markdown("### 💡 使用建议")
+        st.sidebar.info("""
+        **新手用户建议流程**:
+        1. 添加自选股
+        2. 配置保守型策略
+        3. 进行模拟回测
+        4. 观察策略效果
+        5. 调整参数优化
+        6. 小资金实盘验证
+        """)
+        
     elif page == "📈 市场概览":
         st.sidebar.markdown("### 📈 数据来源")
         st.sidebar.markdown("""
@@ -400,15 +430,18 @@ def create_candlestick_chart(stock_data, technical_indicators=None):
 def render_stock_analysis_page(symbol, period):
     """渲染股票分析页面"""
     
+    st.subheader("📊 股票深度分析")
+    
     # 使用智能股票输入组件
     try:
         from src.ui.smart_stock_input import smart_stock_input, display_stock_info
         
-        # 智能股票选择
-        st.subheader("📊 股票分析")
+        # 添加使用提示
+        st.info("� **搜索提示**: 支持股票代码(如: 000001)、完整名称(如: 平安银行)或简称(如: 中行)的模糊搜索")
         
+        # 智能股票选择
         symbol, name = smart_stock_input(
-            label="选择要分析的股票",
+            label="🔍 选择要分析的股票",
             default_symbol=symbol,
             key="stock_analysis"
         )
@@ -418,14 +451,49 @@ def render_stock_analysis_page(symbol, period):
         
     except Exception as e:
         # 降级处理
+        st.warning("⚠️ 智能搜索组件加载失败，使用基础输入模式")
+        
         try:
             from src.data.stock_mapper import stock_mapper
-            stock_name = stock_mapper.get_stock_name(symbol)
-            display_title = f"{stock_name} ({symbol})" if stock_name != symbol else symbol
+            
+            # 基础股票选择
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                # 获取所有股票
+                all_stocks = stock_mapper.get_all_stocks()
+                stock_options = [f"{code} - {name}" for code, name in sorted(all_stocks.items())]
+                
+                # 找到当前股票的索引
+                current_option = f"{symbol} - {stock_mapper.get_stock_name(symbol)}"
+                current_index = 0
+                if current_option in stock_options:
+                    current_index = stock_options.index(current_option)
+                
+                selected_option = st.selectbox(
+                    "选择股票进行分析",
+                    options=stock_options,
+                    index=current_index,
+                    help="选择要分析的股票，支持键盘输入搜索"
+                )
+                
+                # 解析选择的股票
+                if " - " in selected_option:
+                    symbol, name = selected_option.split(" - ", 1)
+                else:
+                    symbol = selected_option
+                    name = stock_mapper.get_stock_name(symbol)
+            
+            with col2:
+                if st.button("🔄 刷新数据", help="重新获取最新股票数据"):
+                    st.rerun()
+            
+            # 显示基础股票信息
+            st.markdown(f"**分析股票**: {name} ({symbol})")
+            
         except:
-            display_title = symbol
-        
-        st.subheader(f"📊 股票分析: {display_title}")
+            # 最基础的降级处理
+            symbol = st.text_input("请输入股票代码", value=symbol, help="如: 000001.SZ")
+            name = symbol
     
     # 分析周期选择
     col1, col2 = st.columns([2, 1])
@@ -865,6 +933,22 @@ def render_auto_trading_page():
     """渲染自动交易页面"""
     st.subheader("⚡ 智能自动交易")
     
+    # 功能介绍
+    st.markdown("""
+    <div style="background: linear-gradient(90deg, #e3f2fd 0%, #f3e5f5 100%); padding: 1.5rem; border-radius: 0.5rem; margin-bottom: 1rem;">
+        <h4 style="color: #1976d2; margin-top: 0;">🤖 智能自动交易系统</h4>
+        <p style="margin-bottom: 0.5rem; color: #424242;">
+            基于AI驱动的智能交易系统，集成多种交易策略和风险管理机制，为投资者提供全自动化的股票交易解决方案。
+        </p>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.5rem; margin-top: 1rem;">
+            <div>📊 <strong>智能策略</strong>: 保守型、平衡型、激进型</div>
+            <div>🛡️ <strong>风险管控</strong>: 止损止盈、仓位控制</div>
+            <div>⭐ <strong>自选股池</strong>: 基于个人偏好的股票池</div>
+            <div>📈 <strong>实时监控</strong>: 24/7交易状态跟踪</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
     st.warning("⚠️ 自动交易功能仅供学习和模拟使用，实盘交易请谨慎操作！")
     
     # 创建标签页
@@ -885,6 +969,23 @@ def render_auto_trading_page():
 def render_trading_config():
     """渲染交易配置页面"""
     st.subheader("🎛️ 交易配置")
+    
+    # 策略说明
+    with st.expander("📚 交易策略详解", expanded=False):
+        st.markdown("""
+        ### 💡 三种交易策略对比
+        
+        | 策略类型 | 风险等级 | 预期收益 | 适用人群 | 主要特点 |
+        |---------|---------|---------|---------|---------|
+        | 🛡️ **保守型** | 低风险 | 8-15% | 投资新手、稳健投资者 | 严格止损、低仓位、稳健操作 |
+        | ⚖️ **平衡型** | 中等风险 | 15-25% | 有经验投资者 | 风险收益平衡、适度杠杆 |
+        | 🚀 **激进型** | 高风险 | 25%+ | 风险承受力强的投资者 | 高仓位、快速进出、追求高收益 |
+        
+        ### 🎯 策略参数说明
+        - **止损设置**: 保守型 5-8%，平衡型 8-12%，激进型 10-15%
+        - **止盈设置**: 保守型 10-15%，平衡型 15-25%，激进型 20-30%
+        - **最大仓位**: 保守型 ≤60%，平衡型 ≤80%，激进型 ≤100%
+        """)
     
     col1, col2 = st.columns(2)
     
@@ -1022,8 +1123,23 @@ def render_trading_config():
 
 def render_simulation_backtest():
     """渲染模拟回测页面"""
-    st.subheader("📈 模拟回测")
-    st.info("💡 通过历史数据回测验证交易策略的有效性")
+    st.subheader("📈 策略模拟回测")
+    
+    # 功能介绍
+    st.markdown("""
+    <div style="background: linear-gradient(90deg, #f8f9fa 0%, #e8f5e8 100%); padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
+        <h4 style="color: #198754; margin-top: 0;">🎯 模拟回测功能说明</h4>
+        <p style="margin-bottom: 0.5rem; color: #424242;">
+            使用历史数据验证交易策略的有效性，评估策略在不同市场环境下的表现，为实盘交易提供决策依据。
+        </p>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.5rem; margin-top: 1rem;">
+            <div>📊 <strong>回测分析</strong>: 历史数据验证策略</div>
+            <div>💰 <strong>收益计算</strong>: 详细盈亏统计</div>
+            <div>📈 <strong>风险评估</strong>: 最大回撤、夏普比率</div>
+            <div>🎛️ <strong>参数优化</strong>: 策略参数调优建议</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
     
     col1, col2 = st.columns(2)
     
@@ -1311,23 +1427,51 @@ def render_add_stock(manager):
     """渲染添加股票页面"""
     st.markdown("### ➕ 添加自选股")
     
-    col1, col2 = st.columns(2)
+    # 添加智能搜索提示
+    st.info("💡 **智能添加**: 使用下方搜索功能快速找到并添加股票到自选股")
     
-    with col1:
-        st.markdown("#### 股票信息")
+    # 尝试使用智能搜索组件
+    try:
+        from src.ui.smart_stock_input import smart_stock_input
+        from src.data.stock_mapper import stock_mapper
         
-        # 股票代码输入
-        stock_code = st.text_input(
-            "股票代码",
-            placeholder="例如: 000001.SZ",
-            help="请输入完整的股票代码，包含交易所后缀"
+        # 智能股票搜索
+        st.markdown("#### 🔍 智能股票搜索")
+        selected_symbol, selected_name = smart_stock_input(
+            label="搜索并选择股票",
+            default_symbol="000001.SZ",
+            key="add_stock_search"
         )
         
-        # 股票名称
-        stock_name = st.text_input(
-            "股票名称",
-            placeholder="例如: 平安银行"
-        )
+        # 自动填充股票信息
+        stock_code = selected_symbol
+        stock_name = selected_name
+        
+        # 尝试获取当前价格（这里可以集成数据获取）
+        current_price = 10.0  # 默认价格，实际应用中可以获取实时价格
+        
+        st.success(f"✅ 已选择: **{stock_name}** ({stock_code})")
+        
+    except Exception as e:
+        # 降级到手动输入
+        st.warning("⚠️ 智能搜索不可用，请手动输入股票信息")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # 股票代码输入
+            stock_code = st.text_input(
+                "股票代码",
+                placeholder="例如: 000001.SZ",
+                help="请输入完整的股票代码，包含交易所后缀"
+            )
+        
+        with col2:
+            # 股票名称
+            stock_name = st.text_input(
+                "股票名称",
+                placeholder="例如: 平安银行"
+            )
         
         # 当前价格
         current_price = st.number_input(
@@ -1338,7 +1482,10 @@ def render_add_stock(manager):
             format="%.2f"
         )
     
-    with col2:
+    # 其他设置
+    col1, col2 = st.columns(2)
+    
+    with col1:
         st.markdown("#### 分组和备注")
         
         # 选择分组
