@@ -34,3 +34,4 @@ scikit-learn==1.3.2
 
 # 数据源扩展
 akshare==1.17.31
+# Docker加速测试 - Fri Aug  8 05:01:16 AM CST 2025
