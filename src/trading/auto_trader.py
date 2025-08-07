@@ -7,6 +7,7 @@
 
 import pandas as pd
 import numpy as np
+import uuid
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 from loguru import logger
@@ -20,6 +21,7 @@ from enum import Enum
 from ..data.data_fetcher import DataFetcher
 from ..ai.stock_analyzer import StockAnalyzer
 from ..ai.risk_manager import RiskManager
+from .watchlist_manager import WatchlistManager
 from config.config import config
 
 class TradeType(Enum):
@@ -81,6 +83,27 @@ class Portfolio:
             'daily_pnl': self.daily_pnl,
             'total_pnl': self.total_pnl
         }
+
+@dataclass
+class SimulationResult:
+    """模拟交易结果"""
+    start_date: str
+    end_date: str
+    initial_capital: float
+    final_capital: float
+    total_return: float
+    total_return_pct: float
+    max_drawdown: float
+    sharpe_ratio: float
+    win_rate: float
+    total_trades: int
+    winning_trades: int
+    losing_trades: int
+    avg_win: float
+    avg_loss: float
+    
+    def to_dict(self):
+        return asdict(self)
 
 class TradingStrategy:
     """交易策略基类"""
@@ -186,7 +209,8 @@ class AggressiveStrategy(TradingStrategy):
 class AutoTrader:
     """自动交易器"""
     
-    def __init__(self, mode: str = "simulate", strategy: str = "conservative", initial_capital: float = 100000):
+    def __init__(self, mode: str = "simulate", strategy: str = "conservative", 
+                 initial_capital: float = 100000, use_watchlist: bool = True):
         """
         初始化自动交易器
         
@@ -194,14 +218,17 @@ class AutoTrader:
             mode: 交易模式 (simulate/live)
             strategy: 交易策略 (conservative/balanced/aggressive)
             initial_capital: 初始资金
+            use_watchlist: 是否使用自选股作为交易股票池
         """
         self.mode = mode
         self.initial_capital = initial_capital
+        self.use_watchlist = use_watchlist
         self.is_running = False
         
         # 初始化组件
         self.data_fetcher = DataFetcher()
         self.analyzer = StockAnalyzer()
+        self.watchlist_manager = WatchlistManager()
         
         # 选择策略
         if strategy == "conservative":
@@ -225,20 +252,428 @@ class AutoTrader:
         # 交易记录
         self.trades_history = []
         
-        # 股票池
-        self.stock_pool = [
-            "000001.SZ", "000002.SZ", "600000.SH", "600036.SH", "000858.SZ"
-        ]
+        # 股票池 - 支持自选股
+        if use_watchlist and self.watchlist_manager.get_stock_count() > 0:
+            # 使用自选股作为股票池
+            watchlist = self.watchlist_manager.get_watchlist()
+            self.stock_pool = [stock.symbol for stock in watchlist]
+            logger.info(f"使用自选股作为交易股票池，共 {len(self.stock_pool)} 只股票")
+        else:
+            # 使用默认股票池
+            self.stock_pool = [
+                "000001.SZ", "000002.SZ", "600000.SH", "600036.SH", "000858.SZ"
+            ]
+            logger.info(f"使用默认股票池，共 {len(self.stock_pool)} 只股票")
         
         # 风险控制参数
         self.max_position_pct = 0.2  # 单只股票最大仓位比例
         self.max_positions = 5  # 最大持仓数量
+        self.commission_rate = 0.0003  # 手续费率
         
         # 数据存储路径
         self.data_dir = Path("data/trading")
         self.data_dir.mkdir(parents=True, exist_ok=True)
         
         logger.info(f"自动交易器初始化完成 - 模式: {mode}, 策略: {strategy}, 初始资金: {initial_capital}")
+    
+    def update_stock_pool(self, use_watchlist: bool = True, custom_stocks: List[str] = None):
+        """
+        更新股票池
+        
+        Args:
+            use_watchlist: 是否使用自选股
+            custom_stocks: 自定义股票列表
+        """
+        try:
+            if custom_stocks:
+                self.stock_pool = custom_stocks
+                logger.info(f"使用自定义股票池，共 {len(self.stock_pool)} 只股票")
+            elif use_watchlist:
+                watchlist = self.watchlist_manager.get_watchlist()
+                if watchlist:
+                    self.stock_pool = [stock.symbol for stock in watchlist]
+                    logger.info(f"使用自选股作为交易股票池，共 {len(self.stock_pool)} 只股票")
+                else:
+                    logger.warning("自选股为空，使用默认股票池")
+                    self.stock_pool = ["000001.SZ", "000002.SZ", "600000.SH", "600036.SH", "000858.SZ"]
+            else:
+                self.stock_pool = ["000001.SZ", "000002.SZ", "600000.SH", "600036.SH", "000858.SZ"]
+                logger.info(f"使用默认股票池，共 {len(self.stock_pool)} 只股票")
+                
+            self.use_watchlist = use_watchlist
+            
+        except Exception as e:
+            logger.error(f"更新股票池失败: {e}")
+    
+    def simulate_trading(self, start_date: str, end_date: str, 
+                        selected_stocks: List[str] = None) -> SimulationResult:
+        """
+        模拟自动交易
+        
+        Args:
+            start_date: 开始日期 (YYYY-MM-DD)
+            end_date: 结束日期 (YYYY-MM-DD)
+            selected_stocks: 指定的股票列表，为None时使用当前股票池
+            
+        Returns:
+            模拟交易结果
+        """
+        try:
+            logger.info(f"开始模拟交易: {start_date} 到 {end_date}")
+            
+            # 使用指定的股票列表或当前股票池
+            stocks_to_trade = selected_stocks if selected_stocks else self.stock_pool
+            
+            # 初始化模拟环境
+            sim_portfolio = Portfolio(
+                cash=self.initial_capital,
+                total_value=self.initial_capital,
+                positions=[],
+                daily_pnl=0.0,
+                total_pnl=0.0
+            )
+            
+            sim_trades = []
+            daily_values = []
+            
+            # 转换日期
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+            
+            current_date = start_dt
+            
+            while current_date <= end_dt:
+                try:
+                    # 模拟每日交易逻辑
+                    date_str = current_date.strftime("%Y-%m-%d")
+                    
+                    # 更新持仓价格和市值
+                    self._update_portfolio_value(sim_portfolio, date_str, stocks_to_trade)
+                    
+                    # 记录每日资产价值
+                    daily_values.append({
+                        'date': date_str,
+                        'total_value': sim_portfolio.total_value,
+                        'cash': sim_portfolio.cash,
+                        'positions_value': sim_portfolio.total_value - sim_portfolio.cash
+                    })
+                    
+                    # 执行交易策略
+                    trades = self._execute_strategy(sim_portfolio, date_str, stocks_to_trade)
+                    sim_trades.extend(trades)
+                    
+                    current_date += timedelta(days=1)
+                    
+                except Exception as e:
+                    logger.warning(f"模拟交易日期 {current_date} 出错: {e}")
+                    current_date += timedelta(days=1)
+                    continue
+            
+            # 计算模拟结果
+            result = self._calculate_simulation_result(
+                start_date, end_date, self.initial_capital, 
+                sim_portfolio.total_value, sim_trades, daily_values
+            )
+            
+            logger.info(f"模拟交易完成 - 总收益率: {result.total_return_pct:.2f}%")
+            return result
+            
+        except Exception as e:
+            logger.error(f"模拟交易失败: {e}")
+            # 返回默认结果
+            return SimulationResult(
+                start_date=start_date,
+                end_date=end_date,
+                initial_capital=self.initial_capital,
+                final_capital=self.initial_capital,
+                total_return=0.0,
+                total_return_pct=0.0,
+                max_drawdown=0.0,
+                sharpe_ratio=0.0,
+                win_rate=0.0,
+                total_trades=0,
+                winning_trades=0,
+                losing_trades=0,
+                avg_win=0.0,
+                avg_loss=0.0
+            )
+    
+    def _update_portfolio_value(self, portfolio: Portfolio, date_str: str, stocks: List[str]):
+        """更新投资组合价值"""
+        try:
+            total_value = portfolio.cash
+            
+            for position in portfolio.positions:
+                # 模拟获取股票价格（这里使用随机价格变化）
+                price_change = np.random.normal(0, 0.02)  # 平均0，标准差2%的价格变化
+                new_price = position.current_price * (1 + price_change)
+                
+                # 更新持仓信息
+                position.current_price = new_price
+                position.market_value = position.quantity * new_price
+                position.profit_loss = position.market_value - (position.quantity * position.avg_cost)
+                position.profit_loss_pct = position.profit_loss / (position.quantity * position.avg_cost) * 100
+                
+                total_value += position.market_value
+            
+            # 更新投资组合总价值
+            portfolio.total_value = total_value
+            portfolio.total_pnl = total_value - self.initial_capital
+            
+        except Exception as e:
+            logger.warning(f"更新投资组合价值失败: {e}")
+    
+    def _execute_strategy(self, portfolio: Portfolio, date_str: str, stocks: List[str]) -> List[Trade]:
+        """执行交易策略"""
+        trades = []
+        
+        try:
+            # 检查卖出信号
+            for position in portfolio.positions[:]:  # 使用副本避免修改时出错
+                # 模拟分析结果
+                mock_analysis = {
+                    'overall_score': np.random.randint(40, 90),
+                    'recommendation': np.random.choice(['买入', '卖出', '持有'], p=[0.3, 0.2, 0.5])
+                }
+                
+                should_sell, reason = self.strategy.should_sell(position.symbol, position, mock_analysis)
+                
+                if should_sell:
+                    trade = self._create_sell_trade(portfolio, position, reason, date_str)
+                    if trade:
+                        trades.append(trade)
+            
+            # 检查买入信号
+            available_cash = portfolio.cash
+            max_investment_per_stock = portfolio.total_value * self.max_position_pct
+            
+            if available_cash > 1000 and len(portfolio.positions) < self.max_positions:
+                for symbol in stocks:
+                    # 检查是否已持有
+                    if any(p.symbol == symbol for p in portfolio.positions):
+                        continue
+                    
+                    # 模拟分析结果
+                    mock_analysis = {
+                        'overall_score': np.random.randint(60, 95),
+                        'recommendation': np.random.choice(['买入', '卖出', '持有'], p=[0.4, 0.1, 0.5])
+                    }
+                    
+                    should_buy, reason = self.strategy.should_buy(symbol, mock_analysis)
+                    
+                    if should_buy:
+                        # 计算买入金额
+                        investment_amount = min(available_cash, max_investment_per_stock)
+                        if investment_amount >= 1000:  # 最小投资金额
+                            trade = self._create_buy_trade(portfolio, symbol, investment_amount, reason, date_str)
+                            if trade:
+                                trades.append(trade)
+                                available_cash -= investment_amount
+                                
+                                # 限制每日买入数量
+                                if len([t for t in trades if t.trade_type == TradeType.BUY]) >= 2:
+                                    break
+        
+        except Exception as e:
+            logger.warning(f"执行交易策略失败: {e}")
+        
+        return trades
+    
+    def _create_buy_trade(self, portfolio: Portfolio, symbol: str, amount: float, reason: str, date_str: str) -> Optional[Trade]:
+        """创建买入交易"""
+        try:
+            # 模拟股票价格
+            price = np.random.uniform(10, 50)  # 随机价格
+            
+            # 计算可买入股票数量（按手计算，1手=100股）
+            shares = int(amount / price / 100) * 100
+            
+            if shares <= 0:
+                return None
+            
+            actual_amount = shares * price
+            commission = actual_amount * self.commission_rate
+            total_cost = actual_amount + commission
+            
+            if total_cost > portfolio.cash:
+                return None
+            
+            # 创建交易记录
+            trade = Trade(
+                id=str(uuid.uuid4()),
+                symbol=symbol,
+                trade_type=TradeType.BUY,
+                quantity=shares,
+                price=price,
+                timestamp=datetime.strptime(date_str, "%Y-%m-%d"),
+                status=TradeStatus.FILLED,
+                reason=reason,
+                commission=commission
+            )
+            
+            # 更新投资组合
+            portfolio.cash -= total_cost
+            
+            # 创建持仓
+            position = Position(
+                symbol=symbol,
+                quantity=shares,
+                avg_cost=price,
+                current_price=price,
+                market_value=actual_amount,
+                profit_loss=0.0,
+                profit_loss_pct=0.0
+            )
+            portfolio.positions.append(position)
+            
+            logger.info(f"买入: {symbol} {shares}股 @ {price:.2f}")
+            return trade
+            
+        except Exception as e:
+            logger.error(f"创建买入交易失败: {e}")
+            return None
+    
+    def _create_sell_trade(self, portfolio: Portfolio, position: Position, reason: str, date_str: str) -> Optional[Trade]:
+        """创建卖出交易"""
+        try:
+            price = position.current_price
+            shares = position.quantity
+            
+            actual_amount = shares * price
+            commission = actual_amount * self.commission_rate
+            net_amount = actual_amount - commission
+            
+            # 创建交易记录
+            trade = Trade(
+                id=str(uuid.uuid4()),
+                symbol=position.symbol,
+                trade_type=TradeType.SELL,
+                quantity=shares,
+                price=price,
+                timestamp=datetime.strptime(date_str, "%Y-%m-%d"),
+                status=TradeStatus.FILLED,
+                reason=reason,
+                commission=commission
+            )
+            
+            # 更新投资组合
+            portfolio.cash += net_amount
+            portfolio.positions.remove(position)
+            
+            logger.info(f"卖出: {position.symbol} {shares}股 @ {price:.2f}")
+            return trade
+            
+        except Exception as e:
+            logger.error(f"创建卖出交易失败: {e}")
+            return None
+    
+    def _calculate_simulation_result(self, start_date: str, end_date: str, 
+                                   initial_capital: float, final_capital: float,
+                                   trades: List[Trade], daily_values: List[Dict]) -> SimulationResult:
+        """计算模拟交易结果"""
+        try:
+            # 基本收益计算
+            total_return = final_capital - initial_capital
+            total_return_pct = (total_return / initial_capital) * 100
+            
+            # 计算最大回撤
+            max_drawdown = 0.0
+            peak_value = initial_capital
+            
+            for daily_value in daily_values:
+                current_value = daily_value['total_value']
+                if current_value > peak_value:
+                    peak_value = current_value
+                
+                drawdown = (peak_value - current_value) / peak_value * 100
+                if drawdown > max_drawdown:
+                    max_drawdown = drawdown
+            
+            # 计算交易统计
+            total_trades = len(trades)
+            buy_trades = [t for t in trades if t.trade_type == TradeType.BUY]
+            sell_trades = [t for t in trades if t.trade_type == TradeType.SELL]
+            
+            # 计算盈亏
+            winning_trades = 0
+            losing_trades = 0
+            wins = []
+            losses = []
+            
+            for sell_trade in sell_trades:
+                # 找到对应的买入交易
+                buy_trade = None
+                for bt in buy_trades:
+                    if (bt.symbol == sell_trade.symbol and 
+                        bt.timestamp < sell_trade.timestamp):
+                        buy_trade = bt
+                        break
+                
+                if buy_trade:
+                    profit = (sell_trade.price - buy_trade.price) * sell_trade.quantity
+                    profit -= sell_trade.commission + buy_trade.commission
+                    
+                    if profit > 0:
+                        winning_trades += 1
+                        wins.append(profit)
+                    else:
+                        losing_trades += 1
+                        losses.append(abs(profit))
+            
+            # 胜率和平均盈亏
+            win_rate = (winning_trades / max(1, winning_trades + losing_trades)) * 100
+            avg_win = np.mean(wins) if wins else 0.0
+            avg_loss = np.mean(losses) if losses else 0.0
+            
+            # 夏普比率（简化计算）
+            if daily_values:
+                returns = []
+                for i in range(1, len(daily_values)):
+                    ret = (daily_values[i]['total_value'] - daily_values[i-1]['total_value']) / daily_values[i-1]['total_value']
+                    returns.append(ret)
+                
+                if returns and np.std(returns) > 0:
+                    sharpe_ratio = np.mean(returns) / np.std(returns) * np.sqrt(252)  # 年化夏普比率
+                else:
+                    sharpe_ratio = 0.0
+            else:
+                sharpe_ratio = 0.0
+            
+            return SimulationResult(
+                start_date=start_date,
+                end_date=end_date,
+                initial_capital=initial_capital,
+                final_capital=final_capital,
+                total_return=total_return,
+                total_return_pct=total_return_pct,
+                max_drawdown=max_drawdown,
+                sharpe_ratio=sharpe_ratio,
+                win_rate=win_rate,
+                total_trades=total_trades,
+                winning_trades=winning_trades,
+                losing_trades=losing_trades,
+                avg_win=avg_win,
+                avg_loss=avg_loss
+            )
+            
+        except Exception as e:
+            logger.error(f"计算模拟结果失败: {e}")
+            return SimulationResult(
+                start_date=start_date,
+                end_date=end_date,
+                initial_capital=initial_capital,
+                final_capital=final_capital,
+                total_return=0.0,
+                total_return_pct=0.0,
+                max_drawdown=0.0,
+                sharpe_ratio=0.0,
+                win_rate=0.0,
+                total_trades=0,
+                winning_trades=0,
+                losing_trades=0,
+                avg_win=0.0,
+                avg_loss=0.0
+            )
     
     def start_trading(self):
         """启动自动交易"""

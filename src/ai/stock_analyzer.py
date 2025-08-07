@@ -148,52 +148,147 @@ class StockAnalyzer:
             score = 50  # 基础分数
             details = {}
             
-            # 趋势分析
+            # 趋势分析 - 增加敏感度
             if 'ma5' in latest and 'ma20' in latest and 'ma60' in latest:
                 ma5 = latest['ma5']
                 ma20 = latest['ma20']
                 ma60 = latest['ma60']
                 price = latest['close']
                 
-                # 均线排列
+                # 计算均线趋势强度
+                ma5_slope = (ma5 - stock_data['ma5'].iloc[-5]) / stock_data['ma5'].iloc[-5] * 100 if len(stock_data) >= 5 else 0
+                ma20_slope = (ma20 - stock_data['ma20'].iloc[-10]) / stock_data['ma20'].iloc[-10] * 100 if len(stock_data) >= 10 else 0
+                
+                # 均线排列 - 根据强度给分
                 if ma5 > ma20 > ma60 and price > ma5:
-                    score += 15
-                    signals.append('多头排列')
+                    base_score = 20
+                    # 根据趋势强度调整
+                    if ma5_slope > 3:  # 强势上涨
+                        score += base_score + 10
+                        signals.append('强势多头排列')
+                    elif ma5_slope > 0:
+                        score += base_score
+                        signals.append('多头排列')
+                    else:
+                        score += base_score - 5
+                        signals.append('多头排列(趋势减弱)')
+                        
                 elif ma5 < ma20 < ma60 and price < ma5:
-                    score -= 15
-                    signals.append('空头排列')
+                    base_score = -20
+                    # 根据趋势强度调整
+                    if ma5_slope < -3:  # 强势下跌
+                        score += base_score - 10
+                        signals.append('强势空头排列')
+                    elif ma5_slope < 0:
+                        score += base_score
+                        signals.append('空头排列')
+                    else:
+                        score += base_score + 5
+                        signals.append('空头排列(下跌减缓)')
+                
+                # 价格与均线的偏离度
+                price_deviation = abs(price - ma20) / ma20 * 100
+                if price_deviation > 10:  # 偏离过大
+                    if price > ma20:
+                        score -= 8  # 可能回调
+                        signals.append('价格偏离均线过高')
+                    else:
+                        score += 8  # 可能反弹
+                        signals.append('价格偏离均线过低')
                 
                 details['ma_trend'] = '上涨' if ma5 > ma20 else '下跌'
+                details['ma5_slope'] = ma5_slope
+                details['price_deviation'] = price_deviation
             
-            # MACD分析
+            # MACD分析 - 增加敏感度
             if 'macd' in latest and 'macd_signal' in latest:
                 macd = latest['macd']
                 macd_signal = latest['macd_signal']
                 
-                if macd > macd_signal and macd > 0:
-                    score += 10
-                    signals.append('MACD金叉向上')
-                elif macd < macd_signal and macd < 0:
-                    score -= 10
-                    signals.append('MACD死叉向下')
+                # 计算MACD强度
+                macd_diff = macd - macd_signal
+                macd_strength = abs(macd_diff) / abs(macd_signal) if abs(macd_signal) > 0.001 else 0
+                
+                if macd > macd_signal:  # 金叉
+                    if macd > 0:
+                        base_score = 15
+                        if macd_strength > 0.1:  # 强金叉
+                            score += base_score + 10
+                            signals.append('MACD强势金叉')
+                        else:
+                            score += base_score
+                            signals.append('MACD金叉向上')
+                    else:
+                        score += 8  # 零轴下方金叉
+                        signals.append('MACD零下金叉')
+                        
+                elif macd < macd_signal:  # 死叉
+                    if macd < 0:
+                        base_score = -15
+                        if macd_strength > 0.1:  # 强死叉
+                            score += base_score - 10
+                            signals.append('MACD强势死叉')
+                        else:
+                            score += base_score
+                            signals.append('MACD死叉向下')
+                    else:
+                        score -= 8  # 零轴上方死叉
+                        signals.append('MACD零上死叉')
+                
+                # MACD背离检测
+                if len(stock_data) >= 10:
+                    recent_price_high = stock_data['close'].tail(10).max()
+                    recent_macd_high = stock_data['macd'].tail(10).max() if 'macd' in stock_data.columns else 0
+                    
+                    if latest['close'] >= recent_price_high and macd < recent_macd_high:
+                        score -= 12
+                        signals.append('MACD顶背离')
+                    elif latest['close'] <= stock_data['close'].tail(10).min() and macd > stock_data['macd'].tail(10).min():
+                        score += 12
+                        signals.append('MACD底背离')
                 
                 details['macd_status'] = 'bullish' if macd > macd_signal else 'bearish'
+                details['macd_strength'] = macd_strength
             
-            # RSI分析
+            # RSI分析 - 增加敏感度和层次
             if 'rsi6' in latest:
                 rsi = latest['rsi6']
                 
-                if rsi < 30:
-                    score += 8
+                # 多层次RSI分析
+                if rsi < 20:  # 极度超卖
+                    score += 18
+                    signals.append('RSI极度超卖')
+                elif rsi < 30:  # 超卖
+                    score += 12
                     signals.append('RSI超卖')
-                elif rsi > 70:
-                    score -= 8
+                elif rsi < 40:  # 偏弱
+                    score += 5
+                    signals.append('RSI偏弱')
+                elif rsi > 80:  # 极度超买
+                    score -= 18
+                    signals.append('RSI极度超买')
+                elif rsi > 70:  # 超买
+                    score -= 12
                     signals.append('RSI超买')
-                elif 40 <= rsi <= 60:
+                elif rsi > 60:  # 偏强
+                    score -= 5
+                    signals.append('RSI偏强')
+                elif 45 <= rsi <= 55:  # 中性区间
                     score += 3
                     signals.append('RSI中性')
                 
+                # RSI钝化检测
+                if len(stock_data) >= 5 and 'rsi6' in stock_data.columns:
+                    rsi_series = stock_data['rsi6'].tail(5)
+                    if rsi > 70 and all(r > 65 for r in rsi_series):
+                        score -= 8  # RSI高位钝化
+                        signals.append('RSI高位钝化')
+                    elif rsi < 30 and all(r < 35 for r in rsi_series):
+                        score += 8  # RSI低位钝化
+                        signals.append('RSI低位钝化')
+                
                 details['rsi_level'] = 'oversold' if rsi < 30 else 'overbought' if rsi > 70 else 'neutral'
+                details['rsi_value'] = rsi
             
             # KDJ分析
             if 'kdj_k' in latest and 'kdj_d' in latest:
@@ -387,6 +482,36 @@ class StockAnalyzer:
             logger.error(f"基本面分析计算失败: {e}")
             return {'score': 50, 'signals': [], 'details': {}}
     
+    def _get_consecutive_trend_days(self, prices):
+        """计算连续上涨或下跌天数（正数表示连续上涨，负数表示连续下跌）"""
+        if len(prices) < 2:
+            return 0
+        
+        consecutive = 0
+        current_trend = None  # True for up, False for down
+        
+        for i in range(len(prices) - 1, 0, -1):
+            if prices[i] > prices[i-1]:  # 上涨
+                if current_trend is None:
+                    current_trend = True
+                    consecutive = 1
+                elif current_trend:
+                    consecutive += 1
+                else:
+                    break
+            elif prices[i] < prices[i-1]:  # 下跌
+                if current_trend is None:
+                    current_trend = False
+                    consecutive = 1
+                elif not current_trend:
+                    consecutive += 1
+                else:
+                    break
+            else:  # 平盘
+                break
+        
+        return consecutive if current_trend else -consecutive
+
     def _calculate_sentiment_score(self, 
                                  stock_data: pd.DataFrame, 
                                  market_data: Dict = None) -> Dict[str, any]:
@@ -408,37 +533,86 @@ class StockAnalyzer:
             if len(stock_data) < 10:
                 return {'score': score, 'signals': signals, 'details': details}
             
-            # 相对强度分析
+            # 相对强度分析 - 增加敏感度
             if market_data and '上证指数' in market_data:
                 index_data = market_data['上证指数']
                 if not index_data.empty and len(index_data) >= len(stock_data):
-                    # 计算相对表现
-                    stock_return = (stock_data['close'].iloc[-1] - stock_data['close'].iloc[-10]) / stock_data['close'].iloc[-10]
-                    index_return = (index_data['close'].iloc[-1] - index_data['close'].iloc[-10]) / index_data['close'].iloc[-10]
+                    # 计算多个时间窗口的相对表现
+                    periods = [5, 10, 20]
+                    relative_strengths = []
                     
-                    relative_strength = stock_return - index_return
+                    for period in periods:
+                        if len(stock_data) >= period and len(index_data) >= period:
+                            stock_return = (stock_data['close'].iloc[-1] - stock_data['close'].iloc[-period]) / stock_data['close'].iloc[-period]
+                            index_return = (index_data['close'].iloc[-1] - index_data['close'].iloc[-period]) / index_data['close'].iloc[-period]
+                            
+                            relative_strength = stock_return - index_return
+                            relative_strengths.append(relative_strength)
                     
-                    if relative_strength > 0.05:
-                        score += 10
-                        signals.append('跑赢大盘')
-                    elif relative_strength < -0.05:
-                        score -= 10
-                        signals.append('跑输大盘')
-                    
-                    details['relative_strength'] = relative_strength
+                    if relative_strengths:
+                        avg_relative_strength = sum(relative_strengths) / len(relative_strengths)
+                        
+                        # 根据相对强度程度给分
+                        if avg_relative_strength > 0.08:  # 强势跑赢
+                            score += 20
+                            signals.append('强势跑赢大盘')
+                        elif avg_relative_strength > 0.03:  # 跑赢
+                            score += 12
+                            signals.append('跑赢大盘')
+                        elif avg_relative_strength > -0.03:  # 同步
+                            score += 3
+                            signals.append('与大盘同步')
+                        elif avg_relative_strength > -0.08:  # 跑输
+                            score -= 12
+                            signals.append('跑输大盘')
+                        else:  # 明显跑输
+                            score -= 20
+                            signals.append('明显跑输大盘')
+                        
+                        details['relative_strength'] = avg_relative_strength
             
-            # 成交量情绪
+            # 成交量情绪 - 增加敏感度
             if 'vol' in stock_data.columns:
                 recent_vol = stock_data['vol'].tail(5).mean()
                 avg_vol = stock_data['vol'].mean()
                 vol_ratio = recent_vol / avg_vol if avg_vol > 0 else 1
                 
-                if vol_ratio > 2:
-                    score += 8
+                # 更细致的成交量分析
+                if vol_ratio > 3:  # 极度放量
+                    score += 15
+                    signals.append('极度放量')
+                elif vol_ratio > 2:  # 明显放量
+                    score += 10
+                    signals.append('明显放量')
+                elif vol_ratio > 1.5:  # 放量
+                    score += 6
                     signals.append('成交活跃')
-                elif vol_ratio < 0.5:
-                    score -= 5
+                elif vol_ratio < 0.3:  # 极度萎缩
+                    score -= 15
+                    signals.append('成交极度萎缩')
+                elif vol_ratio < 0.5:  # 萎缩
+                    score -= 8
                     signals.append('成交清淡')
+                elif vol_ratio < 0.8:  # 偏淡
+                    score -= 3
+                    signals.append('成交偏淡')
+                
+                # 量价配合分析
+                if len(stock_data) >= 2:
+                    price_change = (stock_data['close'].iloc[-1] - stock_data['close'].iloc[-2]) / stock_data['close'].iloc[-2]
+                    
+                    if price_change > 0.02 and vol_ratio > 1.5:  # 放量上涨
+                        score += 8
+                        signals.append('量价配合上涨')
+                    elif price_change < -0.02 and vol_ratio > 1.5:  # 放量下跌
+                        score -= 12
+                        signals.append('放量下跌')
+                    elif price_change > 0.02 and vol_ratio < 0.8:  # 缩量上涨
+                        score -= 5
+                        signals.append('缩量上涨(动力不足)')
+                    elif price_change < -0.02 and vol_ratio < 0.8:  # 缩量下跌
+                        score += 3
+                        signals.append('缩量下跌(抛压减轻)')
                 
                 details['volume_sentiment'] = vol_ratio
             
@@ -734,26 +908,27 @@ class StockAnalyzer:
     
     def _get_score_level(self, score: float) -> str:
         """
-        获取评分等级
+        获取评分等级 - 优化分布，增加区分度
         
         Args:
             score: 评分
             
         Returns:
-            评分等级
+            评分等级（中文）
         """
-        if score >= 80:
-            return 'excellent'
-        elif score >= 70:
-            return 'good'
-        elif score >= 60:
-            return 'fair'
-        elif score >= 40:
-            return 'neutral'
-        elif score >= 30:
-            return 'poor'
+        # 调整阈值，让分布更合理，增加敏感度
+        if score >= 85:
+            return '优秀'      # 85-100: 优秀 (约5-10%)
+        elif score >= 75:
+            return '良好'      # 75-85:  良好 (约15-20%) 
+        elif score >= 65:
+            return '一般'      # 65-75:  一般 (约25-30%)
+        elif score >= 50:
+            return '中性'      # 50-65:  中性 (约30-35%)
+        elif score >= 35:
+            return '较差'      # 35-50:  较差 (约15-20%)
         else:
-            return 'very_poor'
+            return '很差'      # 0-35:   很差 (约5-10%)
     
     def _empty_analysis(self) -> Dict[str, any]:
         """

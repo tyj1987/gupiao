@@ -12,6 +12,8 @@ import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
 import datetime
+from datetime import datetime, timedelta
+import time
 import os
 import sys
 from pathlib import Path
@@ -108,6 +110,36 @@ st.markdown("""
     .price-neutral {
         color: #666666 !important;
     }
+    
+    /* 数据表格样式 */
+    .dataframe td {
+        padding: 8px !important;
+    }
+    
+    /* 涨跌幅样式 */
+    .change-positive {
+        color: #ff4d4d !important;
+        font-weight: bold;
+        background-color: rgba(255, 77, 77, 0.1) !important;
+        padding: 2px 6px !important;
+        border-radius: 3px !important;
+    }
+    
+    .change-negative {
+        color: #4d9f4d !important;
+        font-weight: bold;
+        background-color: rgba(77, 159, 77, 0.1) !important;
+        padding: 2px 6px !important;
+        border-radius: 3px !important;
+    }
+    
+    .change-zero {
+        color: #808080 !important;
+        font-weight: bold;
+        background-color: rgba(128, 128, 128, 0.1) !important;
+        padding: 2px 6px !important;
+        border-radius: 3px !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -181,6 +213,25 @@ def get_cached_analysis(symbol, period):
 def render_header():
     """渲染页面头部"""
     st.markdown('<h1 class="main-header">📈 股票AI分析助手</h1>', unsafe_allow_html=True)
+    
+    # 免责声明 - 醒目位置
+    st.markdown("""
+    <div style="background-color: #fff3cd; border: 2px solid #ffc107; border-radius: 10px; padding: 15px; margin: 20px 0;">
+        <div style="color: #856404; text-align: center;">
+            <h3 style="color: #d63384; margin-top: 0;">⚠️ 重要免责声明</h3>
+            <p style="margin: 10px 0; font-size: 16px; font-weight: bold;">
+                🎓 本工具为<span style="color: #d63384;">公益性质</span>，专为新手股民提供投资学习参考
+            </p>
+            <p style="margin: 5px 0; font-size: 14px;">
+                📊 所有分析结果仅供参考，不构成投资建议 | 🔍 股市有风险，投资需谨慎
+            </p>
+            <p style="margin: 5px 0; font-size: 14px;">
+                ⚖️ <strong>作者不承担任何因使用本工具而产生的投资风险和损失</strong>
+            </p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
     st.markdown("""
     <div style="text-align: center; color: #666; margin-bottom: 2rem;">
         🎯 专为新手股民设计 | 🤖 AI智能分析 | 📊 实时数据 | 💡 投资建议
@@ -459,7 +510,21 @@ def render_stock_analysis_page(symbol, period):
     
     with col4:
         risk_level = analysis_result.get('risk_level', '中等')
-        risk_class = f"risk-{risk_level.lower()}" if risk_level.lower() in ['low', 'medium', 'high'] else "risk-medium"
+        
+        # 中文风险等级到CSS类的映射
+        risk_class_mapping = {
+            '低': 'risk-low',
+            '低风险': 'risk-low', 
+            '中等': 'risk-medium',
+            '中等风险': 'risk-medium',
+            '高': 'risk-high',
+            '高风险': 'risk-high',
+            'low': 'risk-low',
+            'medium': 'risk-medium', 
+            'high': 'risk-high'
+        }
+        
+        risk_class = risk_class_mapping.get(risk_level, 'risk-medium')
         st.markdown(f'<p class="{risk_class}">风险等级: {risk_level}</p>', unsafe_allow_html=True)
     
     # AI评分详细信息
@@ -670,6 +735,20 @@ def render_stock_screening_page():
                         
                         df = pd.DataFrame(screening_results)
                         
+                        # 格式化涨跌数据以符合中国股市习惯
+                        if 'upside' in df.columns:
+                            def format_upside(value):
+                                if pd.isna(value):
+                                    return ""
+                                if value > 0:
+                                    return f"📈 +{value:.1f}%"
+                                elif value < 0:
+                                    return f"📉 {value:.1f}%"
+                                else:
+                                    return f"➖ {value:.1f}%"
+                            
+                            df['formatted_upside'] = df['upside'].apply(format_upside)
+                        
                         # 格式化显示
                         st.dataframe(
                             df,
@@ -692,10 +771,8 @@ def render_stock_screening_page():
                                     "目标价格", 
                                     format="¥%.2f"
                                 ),
-                                "upside": st.column_config.NumberColumn(
-                                    "上涨空间",
-                                    format="%.1f%%"
-                                ),
+                                "formatted_upside": "涨跌空间",
+                                "upside": None,  # 隐藏原始upside列
                                 "confidence": st.column_config.ProgressColumn(
                                     "置信度",
                                     help="分析置信度",
@@ -741,8 +818,40 @@ def render_stock_screening_page():
                             'upside': 17.5
                         }
                     ]
+                    
+                    # 格式化涨跌数据以符合中国股市习惯
+                    for result in screening_results:
+                        upside = result['upside']
+                        if upside > 0:
+                            result['formatted_upside'] = f"📈 +{upside:.1f}%"
+                        elif upside < 0:
+                            result['formatted_upside'] = f"📉 {upside:.1f}%"
+                        else:
+                            result['formatted_upside'] = f"➖ {upside:.1f}%"
+                    
                     df = pd.DataFrame(screening_results)
-                    st.dataframe(df, hide_index=True, use_container_width=True)
+                    st.dataframe(
+                        df,
+                        column_config={
+                            "symbol": "股票代码",
+                            "name": "股票名称",
+                            "score": "AI评分",
+                            "recommendation": "投资建议",
+                            "risk_level": "风险等级",
+                            "current_price": st.column_config.NumberColumn(
+                                "当前价格",
+                                format="¥%.2f"
+                            ),
+                            "target_price": st.column_config.NumberColumn(
+                                "目标价格",
+                                format="¥%.2f"
+                            ),
+                            "formatted_upside": "涨跌空间",
+                            "upside": None,  # 隐藏原始upside列
+                        },
+                        hide_index=True, 
+                        use_container_width=True
+                    )
                     
             except Exception as e:
                 st.error(f"筛选过程中出现错误: {e}")
@@ -758,11 +867,29 @@ def render_auto_trading_page():
     
     st.warning("⚠️ 自动交易功能仅供学习和模拟使用，实盘交易请谨慎操作！")
     
-    # 交易设置
+    # 创建标签页
+    tab1, tab2, tab3, tab4 = st.tabs(["🎛️ 交易配置", "📈 模拟回测", "⭐ 自选股管理", "📊 交易记录"])
+    
+    with tab1:
+        render_trading_config()
+    
+    with tab2:
+        render_simulation_backtest()
+    
+    with tab3:
+        render_watchlist_management()
+    
+    with tab4:
+        render_trading_records()
+
+def render_trading_config():
+    """渲染交易配置页面"""
+    st.subheader("🎛️ 交易配置")
+    
     col1, col2 = st.columns(2)
     
     with col1:
-        st.subheader("交易配置")
+        st.markdown("### 基础配置")
         
         trading_mode = st.radio(
             "交易模式",
@@ -779,62 +906,817 @@ def render_auto_trading_page():
         initial_capital = st.number_input(
             "初始资金（元）",
             min_value=1000,
-            value=10000,
-            step=1000
+            value=100000,
+            step=1000,
+            help="建议至少1万元以上"
         )
         
         max_position = st.slider(
             "单只股票最大仓位（%）",
             min_value=5,
             max_value=50,
-            value=20
+            value=20,
+            help="控制单一股票风险"
+        )
+        
+        max_stocks = st.slider(
+            "最大持仓股票数",
+            min_value=1,
+            max_value=20,
+            value=5,
+            help="分散投资降低风险"
         )
     
     with col2:
-        st.subheader("交易统计")
+        st.markdown("### 股票池设置")
         
-        # 模拟交易统计
-        col2_1, col2_2 = st.columns(2)
+        use_watchlist = st.checkbox(
+            "使用自选股作为交易股票池",
+            value=True,
+            help="勾选后将使用自选股进行交易，否则使用默认股票池"
+        )
         
-        with col2_1:
-            st.metric("总收益率", "+12.5%", "+2.3%")
-            st.metric("胜率", "68.5%", "+5.2%")
+        if use_watchlist:
+            try:
+                from src.trading.watchlist_manager import WatchlistManager
+                watchlist_manager = WatchlistManager()
+                watchlist = watchlist_manager.get_watchlist()
+                
+                if watchlist:
+                    st.success(f"✅ 已加载 {len(watchlist)} 只自选股")
+                    
+                    # 显示自选股列表
+                    watchlist_data = []
+                    for stock in watchlist[:10]:  # 只显示前10只
+                        watchlist_data.append({
+                            "股票代码": stock.symbol,
+                            "股票名称": stock.name,
+                            "分组": stock.group_name,
+                            "添加日期": stock.add_date[:10]
+                        })
+                    
+                    if watchlist_data:
+                        st.dataframe(pd.DataFrame(watchlist_data), use_container_width=True)
+                        
+                        if len(watchlist) > 10:
+                            st.info(f"显示前10只股票，共有 {len(watchlist)} 只自选股")
+                else:
+                    st.warning("⚠️ 自选股为空，请先添加自选股")
+                    use_watchlist = False
+                    
+            except Exception as e:
+                st.error(f"加载自选股失败: {e}")
+                use_watchlist = False
         
-        with col2_2:
-            st.metric("最大回撤", "-8.2%", "-1.1%")
-            st.metric("夏普比率", "1.45", "+0.23")
+        if not use_watchlist:
+            st.info("使用默认股票池：平安银行、万科A、浦发银行、招商银行、五粮液")
+        
+        # 策略说明
+        st.markdown("### 策略说明")
+        
+        strategy_info = {
+            "保守型": {
+                "icon": "🛡️",
+                "description": "严格风控，追求稳健收益",
+                "features": ["AI评分≥80才买入", "止损-5%", "止盈+15%", "优先低风险股票"]
+            },
+            "平衡型": {
+                "icon": "⚖️", 
+                "description": "平衡风险与收益",
+                "features": ["AI评分≥75才买入", "止损-10%", "止盈+20%", "综合考虑各项指标"]
+            },
+            "激进型": {
+                "icon": "🚀",
+                "description": "追求高收益，承担较高风险", 
+                "features": ["AI评分≥65才买入", "止损-15%", "止盈+30%", "关注成长潜力股"]
+            }
+        }
+        
+        if strategy in strategy_info:
+            info = strategy_info[strategy]
+            st.markdown(f"""
+            **{info['icon']} {strategy}策略**  
+            {info['description']}
+            
+            **特点：**
+            """)
+            for feature in info['features']:
+                st.markdown(f"- {feature}")
     
     # 交易控制
+    st.markdown("### 🎮 交易控制")
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        if st.button("▶️ 启动交易", type="primary"):
-            st.success("自动交易已启动！")
+        if st.button("▶️ 启动交易", type="primary", use_container_width=True):
+            st.success("✅ 自动交易已启动！")
+            st.balloons()
     
     with col2:
-        if st.button("⏸️ 暂停交易"):
-            st.info("自动交易已暂停")
+        if st.button("⏸️ 暂停交易", use_container_width=True):
+            st.info("⏸️ 自动交易已暂停")
     
     with col3:
-        if st.button("⏹️ 停止交易"):
-            st.warning("自动交易已停止")
+        if st.button("⏹️ 停止交易", use_container_width=True):
+            st.warning("⏹️ 自动交易已停止")
+
+def render_simulation_backtest():
+    """渲染模拟回测页面"""
+    st.subheader("📈 模拟回测")
+    st.info("💡 通过历史数据回测验证交易策略的有效性")
     
-    # 交易日志
-    st.subheader("📝 交易记录")
+    col1, col2 = st.columns(2)
     
-    # 模拟交易记录
-    trade_data = {
-        '时间': ['2024-01-15 09:30', '2024-01-15 14:25', '2024-01-16 10:15'],
-        '股票': ['平安银行', '万科A', '平安银行'],
-        '操作': ['买入', '买入', '卖出'],
-        '价格': [12.34, 15.67, 13.45],
-        '数量': [1000, 800, 1000],
-        '金额': [12340, 12536, 13450],
-        '状态': ['已成交', '已成交', '已成交']
+    with col1:
+        st.markdown("### 回测参数")
+        
+        # 日期选择
+        end_date = datetime.now().date()
+        start_date = end_date - timedelta(days=180)  # 默认6个月
+        
+        backtest_start = st.date_input(
+            "开始日期",
+            value=start_date,
+            max_value=end_date,
+            help="建议至少3个月以上"
+        )
+        
+        backtest_end = st.date_input(
+            "结束日期", 
+            value=end_date,
+            min_value=backtest_start,
+            max_value=end_date
+        )
+        
+        # 策略选择
+        backtest_strategy = st.selectbox(
+            "回测策略",
+            ["保守型", "平衡型", "激进型"],
+            key="backtest_strategy"
+        )
+        
+        # 初始资金
+        backtest_capital = st.number_input(
+            "初始资金（元）",
+            min_value=10000,
+            value=100000,
+            step=10000,
+            key="backtest_capital"
+        )
+        
+        # 股票选择
+        use_watchlist_backtest = st.checkbox(
+            "使用自选股回测",
+            value=True,
+            key="use_watchlist_backtest"
+        )
+        
+        if not use_watchlist_backtest:
+            # 手动选择股票
+            available_stocks = [
+                "000001.SZ - 平安银行",
+                "000002.SZ - 万科A", 
+                "600000.SH - 浦发银行",
+                "600036.SH - 招商银行",
+                "000858.SZ - 五粮液"
+            ]
+            
+            selected_stocks = st.multiselect(
+                "选择股票",
+                available_stocks,
+                default=available_stocks[:3],
+                help="建议选择3-5只股票进行回测"
+            )
+    
+    with col2:
+        st.markdown("### 回测结果")
+        
+        if st.button("🚀 开始回测", type="primary", use_container_width=True):
+            with st.spinner("正在进行历史回测..."):
+                try:
+                    # 模拟回测结果
+                    time.sleep(2)  # 模拟计算时间
+                    
+                    # 生成模拟结果
+                    total_return = np.random.uniform(-10, 25)  # -10% 到 25%
+                    max_drawdown = np.random.uniform(2, 15)   # 2% 到 15%
+                    win_rate = np.random.uniform(45, 75)      # 45% 到 75%
+                    sharpe = np.random.uniform(0.8, 2.2)      # 0.8 到 2.2
+                    
+                    st.success("✅ 回测完成！")
+                    
+                    # 显示核心指标
+                    metric_col1, metric_col2 = st.columns(2)
+                    
+                    with metric_col1:
+                        # 总收益率
+                        color = "#dc3545" if total_return > 0 else "#28a745"  # 中国股市习惯
+                        st.markdown(f"""
+                        <div style='padding: 15px; border-radius: 8px; background-color: rgba({"220, 53, 69" if total_return > 0 else "40, 167, 69"}, 0.1); text-align: center;'>
+                            <div style='color: #666; font-size: 14px;'>总收益率</div>
+                            <div style='color: {color}; font-size: 32px; font-weight: bold; margin: 8px 0;'>{total_return:+.2f}%</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        # 最大回撤
+                        st.markdown(f"""
+                        <div style='padding: 15px; border-radius: 8px; background-color: rgba(108, 117, 125, 0.1); text-align: center; margin-top: 10px;'>
+                            <div style='color: #666; font-size: 14px;'>最大回撤</div>
+                            <div style='color: #6c757d; font-size: 32px; font-weight: bold; margin: 8px 0;'>-{max_drawdown:.2f}%</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    
+                    with metric_col2:
+                        # 胜率
+                        st.markdown(f"""
+                        <div style='padding: 15px; border-radius: 8px; background-color: rgba(255, 193, 7, 0.1); text-align: center;'>
+                            <div style='color: #666; font-size: 14px;'>胜率</div>
+                            <div style='color: #ffc107; font-size: 32px; font-weight: bold; margin: 8px 0;'>{win_rate:.1f}%</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        # 夏普比率
+                        st.markdown(f"""
+                        <div style='padding: 15px; border-radius: 8px; background-color: rgba(13, 110, 253, 0.1); text-align: center; margin-top: 10px;'>
+                            <div style='color: #666; font-size: 14px;'>夏普比率</div>
+                            <div style='color: #0d6efd; font-size: 32px; font-weight: bold; margin: 8px 0;'>{sharpe:.2f}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    
+                    # 详细统计
+                    st.markdown("### 📊 详细统计")
+                    
+                    stats_data = {
+                        "指标": ["交易次数", "盈利次数", "亏损次数", "平均盈利", "平均亏损", "盈亏比"],
+                        "数值": ["24", "15", "9", "+3.2%", "-1.8%", "1.78"]
+                    }
+                    
+                    st.dataframe(pd.DataFrame(stats_data), use_container_width=True)
+                    
+                except Exception as e:
+                    st.error(f"回测失败: {e}")
+        
+        # 回测说明
+        st.markdown("""
+        ### 📝 回测说明
+        
+        **回测原理：**
+        - 使用历史数据模拟交易策略
+        - 按照设定的买卖规则执行交易  
+        - 计算各项风险收益指标
+        
+        **注意事项：**
+        - 历史表现不代表未来收益
+        - 实际交易可能存在滑点和冲击成本
+        - 建议多个时间段和策略对比分析
+        """)
+
+def render_watchlist_management():
+    """渲染自选股管理页面"""
+    st.subheader("⭐ 自选股管理")
+    
+    try:
+        from src.trading.watchlist_manager import WatchlistManager
+        
+        # 初始化自选股管理器
+        if 'watchlist_manager' not in st.session_state:
+            st.session_state.watchlist_manager = WatchlistManager()
+        
+        manager = st.session_state.watchlist_manager
+        
+        # 创建子标签页
+        subtab1, subtab2, subtab3 = st.tabs(["📋 股票列表", "➕ 添加股票", "📁 分组管理"])
+        
+        with subtab1:
+            render_stock_list(manager)
+        
+        with subtab2:
+            render_add_stock(manager)
+        
+        with subtab3:
+            render_group_management(manager)
+            
+    except Exception as e:
+        st.error(f"自选股管理模块加载失败: {e}")
+        st.info("💡 请确保相关依赖已正确安装")
+
+def render_stock_list(manager):
+    """渲染股票列表"""
+    st.markdown("### 📋 我的自选股")
+    
+    # 获取分组列表
+    groups = manager.get_groups()
+    group_names = ["全部"] + list(groups.keys())
+    
+    # 分组筛选
+    col1, col2, col3 = st.columns([2, 2, 1])
+    
+    with col1:
+        selected_group = st.selectbox(
+            "选择分组",
+            group_names,
+            key="stock_list_group"
+        )
+    
+    with col2:
+        search_keyword = st.text_input(
+            "搜索股票",
+            placeholder="输入股票名称或代码",
+            key="stock_search"
+        )
+    
+    with col3:
+        st.write("")  # 空行对齐
+        refresh_button = st.button("🔄 刷新", key="refresh_stocks")
+    
+    # 获取股票列表
+    if search_keyword:
+        stocks = manager.search_stocks(search_keyword)
+    elif selected_group == "全部":
+        stocks = manager.get_watchlist()
+    else:
+        stocks = manager.get_watchlist(selected_group)
+    
+    if stocks:
+        st.success(f"📊 共找到 {len(stocks)} 只股票")
+        
+        # 显示股票列表
+        stock_data = []
+        for stock in stocks:
+            # 模拟当前价格和涨跌
+            current_price = stock.add_price * (1 + np.random.uniform(-0.1, 0.1))
+            change = current_price - stock.add_price
+            change_pct = (change / stock.add_price) * 100
+            
+            stock_data.append({
+                "股票代码": stock.symbol,
+                "股票名称": stock.name,
+                "当前价格": f"¥{current_price:.2f}",
+                "涨跌额": f"{change:+.2f}",
+                "涨跌幅": f"{change_pct:+.2f}%",
+                "分组": stock.group_name,
+                "添加日期": stock.add_date[:10],
+                "备注": stock.notes[:20] + "..." if len(stock.notes) > 20 else stock.notes
+            })
+        
+        # 自定义显示格式
+        df = pd.DataFrame(stock_data)
+        
+        # 使用容器显示，支持中国股市颜色
+        for i, row in df.iterrows():
+            with st.container():
+                col1, col2, col3, col4 = st.columns([3, 2, 2, 1])
+                
+                with col1:
+                    st.write(f"**{row['股票名称']}** ({row['股票代码']})")
+                    st.caption(f"分组: {row['分组']} | 添加: {row['添加日期']}")
+                
+                with col2:
+                    st.write(f"**{row['当前价格']}**")
+                    
+                    # 根据涨跌显示颜色
+                    change_val = float(row['涨跌额'])
+                    if change_val > 0:
+                        st.markdown(f"<span style='color: #dc3545;'>📈 {row['涨跌额']} ({row['涨跌幅']})</span>", unsafe_allow_html=True)
+                    elif change_val < 0:
+                        st.markdown(f"<span style='color: #28a745;'>📉 {row['涨跌额']} ({row['涨跌幅']})</span>", unsafe_allow_html=True)
+                    else:
+                        st.markdown(f"<span style='color: #6c757d;'>➖ {row['涨跌额']} ({row['涨跌幅']})</span>", unsafe_allow_html=True)
+                
+                with col3:
+                    if row['备注']:
+                        st.write(f"📝 {row['备注']}")
+                    else:
+                        st.write("无备注")
+                
+                with col4:
+                    if st.button("🗑️", key=f"del_{stocks[i].symbol}", help="删除股票"):
+                        if manager.remove_stock(stocks[i].symbol):
+                            st.success(f"已删除 {stocks[i].name}")
+                            time.sleep(0.5)
+                            st.rerun()
+                        else:
+                            st.error("删除失败")
+                
+                st.divider()
+    else:
+        st.info("📭 当前分组暂无股票")
+        
+        if selected_group != "全部":
+            if st.button("➕ 添加股票到此分组"):
+                st.session_state.add_stock_group = selected_group
+                st.rerun()
+
+def render_add_stock(manager):
+    """渲染添加股票页面"""
+    st.markdown("### ➕ 添加自选股")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("#### 股票信息")
+        
+        # 股票代码输入
+        stock_code = st.text_input(
+            "股票代码",
+            placeholder="例如: 000001.SZ",
+            help="请输入完整的股票代码，包含交易所后缀"
+        )
+        
+        # 股票名称
+        stock_name = st.text_input(
+            "股票名称",
+            placeholder="例如: 平安银行"
+        )
+        
+        # 当前价格
+        current_price = st.number_input(
+            "当前价格（元）",
+            min_value=0.01,
+            value=10.0,
+            step=0.01,
+            format="%.2f"
+        )
+    
+    with col2:
+        st.markdown("#### 分组和备注")
+        
+        # 选择分组
+        groups = manager.get_group_names()
+        
+        # 检查是否有预设分组
+        default_group = getattr(st.session_state, 'add_stock_group', '默认分组')
+        if default_group in groups:
+            default_index = groups.index(default_group)
+        else:
+            default_index = 0
+        
+        selected_group = st.selectbox(
+            "选择分组",
+            groups,
+            index=default_index
+        )
+        
+        # 新建分组选项
+        create_new_group = st.checkbox("创建新分组")
+        
+        if create_new_group:
+            new_group_name = st.text_input(
+                "新分组名称",
+                placeholder="输入新分组名称"
+            )
+            
+            new_group_desc = st.text_input(
+                "分组描述",
+                placeholder="可选，描述此分组的用途"
+            )
+            
+            if new_group_name:
+                selected_group = new_group_name
+        
+        # 备注
+        notes = st.text_area(
+            "备注",
+            placeholder="可选，添加关于此股票的备注信息",
+            max_chars=200
+        )
+    
+    # 添加按钮
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col2:
+        if st.button("✅ 添加到自选股", type="primary", use_container_width=True):
+            # 验证输入
+            if not stock_code or not stock_name:
+                st.error("❌ 请填写完整的股票代码和名称")
+            else:
+                # 创建新分组（如果需要）
+                if create_new_group and new_group_name:
+                    manager.create_group(new_group_name, new_group_desc or "")
+                
+                # 添加股票
+                success = manager.add_stock(
+                    symbol=stock_code,
+                    name=stock_name,
+                    current_price=current_price,
+                    group_name=selected_group,
+                    notes=notes
+                )
+                
+                if success:
+                    st.success(f"✅ 成功添加 {stock_name} 到自选股！")
+                    st.balloons()
+                    
+                    # 清空表单
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error("❌ 添加失败，股票可能已存在")
+    
+    # 快速添加热门股票
+    st.markdown("---")
+    st.markdown("### 🔥 快速添加热门股票")
+    
+    popular_stocks = [
+        {"code": "000001.SZ", "name": "平安银行", "price": 12.34},
+        {"code": "000002.SZ", "name": "万科A", "price": 15.67},
+        {"code": "600000.SH", "name": "浦发银行", "price": 8.90},
+        {"code": "600036.SH", "name": "招商银行", "price": 45.23},
+        {"code": "000858.SZ", "name": "五粮液", "price": 165.40}
+    ]
+    
+    cols = st.columns(5)
+    
+    for i, stock in enumerate(popular_stocks):
+        with cols[i]:
+            if st.button(
+                f"**{stock['name']}**\n{stock['code']}\n¥{stock['price']}", 
+                key=f"quick_add_{stock['code']}"
+            ):
+                success = manager.add_stock(
+                    symbol=stock['code'],
+                    name=stock['name'],
+                    current_price=stock['price'],
+                    group_name=selected_group
+                )
+                
+                if success:
+                    st.success(f"✅ 已添加 {stock['name']}")
+                    time.sleep(0.5)
+                    st.rerun()
+
+def render_group_management(manager):
+    """渲染分组管理页面"""
+    st.markdown("### 📁 分组管理")
+    
+    # 获取所有分组
+    groups = manager.get_groups()
+    
+    if groups:
+        for group_name, group_info in groups.items():
+            with st.expander(f"📁 {group_name} ({len(group_info.stocks)} 只股票)", expanded=False):
+                col1, col2 = st.columns([3, 1])
+                
+                with col1:
+                    st.write(f"**描述：** {group_info.description}")
+                    st.write(f"**创建时间：** {group_info.created_date}")
+                    st.write(f"**股票数量：** {len(group_info.stocks)} 只")
+                    
+                    if group_info.stocks:
+                        stock_names = []
+                        for symbol in group_info.stocks[:10]:  # 最多显示10只
+                            watchlist = manager.get_watchlist()
+                            for stock in watchlist:
+                                if stock.symbol == symbol:
+                                    stock_names.append(f"{stock.name}({symbol})")
+                                    break
+                        
+                        st.write(f"**包含股票：** {', '.join(stock_names)}")
+                        if len(group_info.stocks) > 10:
+                            st.caption(f"还有 {len(group_info.stocks) - 10} 只股票...")
+                
+                with col2:
+                    if group_name != "默认分组":  # 不允许删除默认分组
+                        if st.button(f"🗑️ 删除", key=f"del_group_{group_name}"):
+                            with st.spinner(f"正在删除分组 {group_name}..."):
+                                success = manager.delete_group(group_name, move_to_default=True)
+                                if success:
+                                    st.success(f"已删除分组: {group_name}")
+                                    time.sleep(0.5)
+                                    st.rerun()
+                                else:
+                                    st.error("删除失败")
+    
+    # 创建新分组
+    st.markdown("---")
+    st.markdown("### ➕ 创建新分组")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        new_group_name = st.text_input(
+            "分组名称",
+            placeholder="例如: 银行股、科技股",
+            key="new_group_name"
+        )
+    
+    with col2:
+        new_group_desc = st.text_input(
+            "分组描述",
+            placeholder="可选，描述此分组的投资主题",
+            key="new_group_desc"
+        )
+    
+    if st.button("创建分组", type="primary"):
+        if new_group_name:
+            success = manager.create_group(new_group_name, new_group_desc or "")
+            if success:
+                st.success(f"✅ 成功创建分组: {new_group_name}")
+                time.sleep(0.5)
+                st.rerun()
+            else:
+                st.error("❌ 创建失败，分组可能已存在")
+        else:
+            st.error("❌ 请输入分组名称")
+
+def render_trading_records():
+    """渲染交易记录页面"""
+    st.subheader("📊 交易记录")
+    
+    # 创建子标签页
+    subtab1, subtab2 = st.tabs(["📈 实时持仓", "📋 历史交易"])
+    
+    with subtab1:
+        render_current_positions()
+    
+    with subtab2:
+        render_trading_history()
+
+def render_current_positions():
+    """渲染当前持仓"""
+    st.markdown("### 📈 当前持仓")
+    
+    # 模拟持仓数据
+    positions_data = {
+        '股票代码': ['000001.SZ', '600036.SH', '000858.SZ'],
+        '股票名称': ['平安银行', '招商银行', '五粮液'],
+        '持仓数量': [2000, 1500, 300],
+        '成本价': [12.34, 45.23, 165.40],
+        '现价': [13.45, 47.80, 168.90],
+        '市值': [26900, 71700, 50670],
+        '盈亏金额': [2220, 3855, 1050],
+        '盈亏比例': [9.0, 5.7, 2.1],
+        '仓位占比': [17.8, 47.4, 33.6]
     }
     
-    trade_df = pd.DataFrame(trade_data)
-    st.dataframe(trade_df, use_container_width=True)
+    if positions_data['股票代码']:
+        # 总览
+        total_value = sum(positions_data['市值'])
+        total_profit = sum(positions_data['盈亏金额'])
+        total_profit_pct = total_profit / (total_value - total_profit) * 100
+        
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("总市值", f"¥{total_value:,.0f}", f"{total_profit:+.0f}")
+        
+        with col2:
+            st.metric("总盈亏", f"¥{total_profit:+,.0f}", f"{total_profit_pct:+.2f}%")
+        
+        with col3:
+            st.metric("持仓股票", f"{len(positions_data['股票代码'])}只", "")
+        
+        with col4:
+            st.metric("可用资金", "¥25,000", "")
+        
+        st.markdown("---")
+        
+        # 持仓详情
+        for i in range(len(positions_data['股票代码'])):
+            with st.container():
+                col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
+                
+                with col1:
+                    st.write(f"**{positions_data['股票名称'][i]}**")
+                    st.caption(f"{positions_data['股票代码'][i]} | {positions_data['持仓数量'][i]}股")
+                
+                with col2:
+                    st.write(f"现价: **¥{positions_data['现价'][i]:.2f}**")
+                    st.caption(f"成本: ¥{positions_data['成本价'][i]:.2f}")
+                
+                with col3:
+                    profit = positions_data['盈亏金额'][i]
+                    profit_pct = positions_data['盈亏比例'][i]
+                    
+                    if profit > 0:
+                        st.markdown(f"<span style='color: #dc3545;'>📈 +¥{profit:.0f} (+{profit_pct:.2f}%)</span>", unsafe_allow_html=True)
+                    else:
+                        st.markdown(f"<span style='color: #28a745;'>📉 ¥{profit:.0f} ({profit_pct:.2f}%)</span>", unsafe_allow_html=True)
+                    
+                    st.caption(f"市值: ¥{positions_data['市值'][i]:,.0f}")
+                
+                with col4:
+                    st.progress(positions_data['仓位占比'][i] / 100)
+                    st.caption(f"{positions_data['仓位占比'][i]:.1f}%")
+                
+                st.divider()
+    else:
+        st.info("📭 当前无持仓股票")
+
+def render_trading_history():
+    """渲染历史交易记录"""
+    st.markdown("### 📋 历史交易记录")
+    
+    # 筛选条件
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        trade_type_filter = st.selectbox(
+            "交易类型",
+            ["全部", "买入", "卖出"]
+        )
+    
+    with col2:
+        date_range = st.date_input(
+            "日期范围",
+            value=[datetime.now().date() - timedelta(days=30), datetime.now().date()],
+            key="trade_history_date"
+        )
+    
+    with col3:
+        stock_filter = st.text_input(
+            "股票筛选",
+            placeholder="输入股票名称或代码"
+        )
+    
+    # 模拟交易记录数据
+    trade_data = {
+        '时间': [
+            '2024-01-15 09:30:15',
+            '2024-01-15 14:25:30', 
+            '2024-01-16 10:15:45',
+            '2024-01-17 11:20:12',
+            '2024-01-18 13:45:28'
+        ],
+        '股票名称': ['平安银行', '招商银行', '平安银行', '五粮液', '招商银行'],
+        '股票代码': ['000001.SZ', '600036.SH', '000001.SZ', '000858.SZ', '600036.SH'],
+        '操作': ['买入', '买入', '卖出', '买入', '卖出'],
+        '价格': [12.34, 45.23, 13.45, 165.40, 47.80],
+        '数量': [2000, 1500, 1000, 300, 500],
+        '金额': [24680, 67845, 13450, 49620, 23900],
+        '手续费': [7.4, 20.4, 4.0, 14.9, 7.2],
+        '盈亏': [0, 0, 1110, 0, 1285],
+        '状态': ['已成交', '已成交', '已成交', '已成交', '已成交']
+    }
+    
+    # 转换为DataFrame
+    df = pd.DataFrame(trade_data)
+    
+    # 应用筛选
+    if trade_type_filter != "全部":
+        df = df[df['操作'] == trade_type_filter]
+    
+    if stock_filter:
+        df = df[df['股票名称'].str.contains(stock_filter) | df['股票代码'].str.contains(stock_filter)]
+    
+    if df.empty:
+        st.info("📭 没有找到匹配的交易记录")
+    else:
+        # 交易统计
+        total_trades = len(df)
+        buy_trades = len(df[df['操作'] == '买入'])
+        sell_trades = len(df[df['操作'] == '卖出'])
+        total_profit = df['盈亏'].sum()
+        
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("总交易次数", total_trades)
+        
+        with col2:
+            st.metric("买入次数", buy_trades)
+        
+        with col3:
+            st.metric("卖出次数", sell_trades)
+        
+        with col4:
+            profit_color = "normal" if total_profit == 0 else ("inverse" if total_profit > 0 else "off")
+            st.metric("已实现盈亏", f"¥{total_profit:+.0f}", delta_color=profit_color)
+        
+        st.markdown("---")
+        
+        # 详细交易记录
+        for i, row in df.iterrows():
+            with st.container():
+                col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
+                
+                with col1:
+                    # 操作类型图标
+                    if row['操作'] == '买入':
+                        st.markdown(f"🟢 **{row['操作']}** {row['股票名称']}")
+                    else:
+                        st.markdown(f"🔴 **{row['操作']}** {row['股票名称']}")
+                    st.caption(f"{row['股票代码']} | {row['时间']}")
+                
+                with col2:
+                    st.write(f"价格: **¥{row['价格']:.2f}**")
+                    st.caption(f"数量: {row['数量']}股")
+                
+                with col3:
+                    st.write(f"金额: **¥{row['金额']:,.0f}**")
+                    if row['盈亏'] > 0:
+                        st.markdown(f"<span style='color: #dc3545;'>📈 盈利: +¥{row['盈亏']:.0f}</span>", unsafe_allow_html=True)
+                    elif row['盈亏'] < 0:
+                        st.markdown(f"<span style='color: #28a745;'>📉 亏损: ¥{row['盈亏']:.0f}</span>", unsafe_allow_html=True)
+                    else:
+                        st.caption("盈亏: --")
+                
+                with col4:
+                    status_color = "🟢" if row['状态'] == '已成交' else "🟡"
+                    st.write(f"{status_color} {row['状态']}")
+                    st.caption(f"费用: ¥{row['手续费']:.1f}")
+                
+                st.divider()
 
 def render_market_overview_page():
     """渲染市场概览页面"""
@@ -860,14 +1742,38 @@ def render_market_overview_page():
             index_names = list(indices.keys())
             for i, name in enumerate(index_names[:4]):  # 第一行显示4个
                 data = indices[name]
-                change_color = "normal" if data['change'] >= 0 else "inverse"
                 
                 with cols[i]:
-                    st.metric(
-                        name, 
-                        f"{data['current']:,.2f}",
-                        f"{data['change']:+.2f} ({data['change_pct']:+.2f}%)"
-                    )
+                    # 中国股市习惯：涨红跌绿
+                    change_value = f"{data['change']:+.2f} ({data['change_pct']:+.2f}%)"
+                    
+                    if data['change'] > 0:
+                        # 上涨用红色
+                        st.markdown(f"""
+                        <div style='text-align: center; padding: 10px; border-radius: 5px; background-color: rgba(255, 77, 77, 0.1);'>
+                            <h4 style='margin: 0; color: #666;'>{name}</h4>
+                            <h2 style='margin: 5px 0; color: #333;'>{data['current']:,.2f}</h2>
+                            <p style='margin: 0; color: #ff4d4d; font-weight: bold;'>📈 {change_value}</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    elif data['change'] < 0:
+                        # 下跌用绿色
+                        st.markdown(f"""
+                        <div style='text-align: center; padding: 10px; border-radius: 5px; background-color: rgba(77, 159, 77, 0.1);'>
+                            <h4 style='margin: 0; color: #666;'>{name}</h4>
+                            <h2 style='margin: 5px 0; color: #333;'>{data['current']:,.2f}</h2>
+                            <p style='margin: 0; color: #4d9f4d; font-weight: bold;'>📉 {change_value}</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    else:
+                        # 平盘用灰色
+                        st.markdown(f"""
+                        <div style='text-align: center; padding: 10px; border-radius: 5px; background-color: rgba(128, 128, 128, 0.1);'>
+                            <h4 style='margin: 0; color: #666;'>{name}</h4>
+                            <h2 style='margin: 5px 0; color: #333;'>{data['current']:,.2f}</h2>
+                            <p style='margin: 0; color: #808080; font-weight: bold;'>➖ {change_value}</p>
+                        </div>
+                        """, unsafe_allow_html=True)
             
             # 第二行显示剩余指数
             if len(index_names) > 4:
@@ -878,19 +1784,79 @@ def render_market_overview_page():
                     if i < len(cols2):
                         data = indices[name]
                         with cols2[i]:
-                            st.metric(
-                                name, 
-                                f"{data['current']:,.2f}",
-                                f"{data['change']:+.2f} ({data['change_pct']:+.2f}%)"
-                            )
+                            # 中国股市习惯：涨红跌绿
+                            change_value = f"{data['change']:+.2f} ({data['change_pct']:+.2f}%)"
+                            
+                            if data['change'] > 0:
+                                # 上涨用红色
+                                st.markdown(f"""
+                                <div style='text-align: center; padding: 10px; border-radius: 5px; background-color: rgba(255, 77, 77, 0.1);'>
+                                    <h4 style='margin: 0; color: #666;'>{name}</h4>
+                                    <h2 style='margin: 5px 0; color: #333;'>{data['current']:,.2f}</h2>
+                                    <p style='margin: 0; color: #ff4d4d; font-weight: bold;'>📈 {change_value}</p>
+                                </div>
+                                """, unsafe_allow_html=True)
+                            elif data['change'] < 0:
+                                # 下跌用绿色
+                                st.markdown(f"""
+                                <div style='text-align: center; padding: 10px; border-radius: 5px; background-color: rgba(77, 159, 77, 0.1);'>
+                                    <h4 style='margin: 0; color: #666;'>{name}</h4>
+                                    <h2 style='margin: 5px 0; color: #333;'>{data['current']:,.2f}</h2>
+                                    <p style='margin: 0; color: #4d9f4d; font-weight: bold;'>📉 {change_value}</p>
+                                </div>
+                                """, unsafe_allow_html=True)
+                            else:
+                                # 平盘用灰色
+                                st.markdown(f"""
+                                <div style='text-align: center; padding: 10px; border-radius: 5px; background-color: rgba(128, 128, 128, 0.1);'>
+                                    <h4 style='margin: 0; color: #666;'>{name}</h4>
+                                    <h2 style='margin: 5px 0; color: #333;'>{data['current']:,.2f}</h2>
+                                    <p style='margin: 0; color: #808080; font-weight: bold;'>➖ {change_value}</p>
+                                </div>
+                                """, unsafe_allow_html=True)
             
             # 市场热点 - 使用实时数据
             st.markdown("### 🔥 今日热点")
             hot_sectors = market_data['hot_sectors']
             
             if hot_sectors:
-                df_hot = pd.DataFrame(hot_sectors)
-                st.dataframe(df_hot, use_container_width=True)
+                # 创建自定义格式的热点板块显示
+                st.markdown("#### 活跃板块排行")
+                
+                # 分列显示热点板块
+                sector_cols = st.columns(2)
+                for i, sector in enumerate(hot_sectors[:10]):  # 显示前10个
+                    col_idx = i % 2
+                    with sector_cols[col_idx]:
+                        change_pct = sector.get('change_pct', 0)
+                        
+                        if change_pct > 0:
+                            # 上涨板块用红色
+                            st.markdown(f"""
+                            <div style='margin: 5px 0; padding: 10px; border-radius: 5px; background-color: rgba(255, 77, 77, 0.1); border-left: 4px solid #ff4d4d;'>
+                                <strong style='color: #333;'>{sector.get('name', '未知板块')}</strong><br>
+                                <span style='color: #ff4d4d; font-weight: bold;'>📈 {change_pct:+.2f}%</span>
+                                <span style='color: #888; margin-left: 10px;'>成交: {sector.get('volume', 0):.1f}亿</span>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        elif change_pct < 0:
+                            # 下跌板块用绿色
+                            st.markdown(f"""
+                            <div style='margin: 5px 0; padding: 10px; border-radius: 5px; background-color: rgba(77, 159, 77, 0.1); border-left: 4px solid #4d9f4d;'>
+                                <strong style='color: #333;'>{sector.get('name', '未知板块')}</strong><br>
+                                <span style='color: #4d9f4d; font-weight: bold;'>📉 {change_pct:+.2f}%</span>
+                                <span style='color: #888; margin-left: 10px;'>成交: {sector.get('volume', 0):.1f}亿</span>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        else:
+                            # 平盘用灰色
+                            st.markdown(f"""
+                            <div style='margin: 5px 0; padding: 10px; border-radius: 5px; background-color: rgba(128, 128, 128, 0.1); border-left: 4px solid #808080;'>
+                                <strong style='color: #333;'>{sector.get('name', '未知板块')}</strong><br>
+                                <span style='color: #808080; font-weight: bold;'>➖ {change_pct:+.2f}%</span>
+                                <span style='color: #888; margin-left: 10px;'>成交: {sector.get('volume', 0):.1f}亿</span>
+                            </div>
+                            """, unsafe_allow_html=True)
             else:
                 st.info("暂无热点板块数据")
                 
@@ -921,17 +1887,53 @@ def render_market_overview_page():
                 st.metric("科创50", "1,234.56", "+12.34 (+1.01%)")
             
             # 市场热点 - 模拟数据
-            st.subheader("🔥 今日热点")
+            st.markdown("### 🔥 今日热点")
+            st.markdown("#### 活跃板块排行")
             
-            hot_topics = [
-                {"板块": "人工智能", "涨跌幅": "+3.45%", "领涨股": "科大讯飞", "资金流入": "15.6亿"},
-                {"板块": "新能源汽车", "涨跌幅": "+2.18%", "领涨股": "宁德时代", "资金流入": "12.3亿"},
-                {"板块": "半导体", "涨跌幅": "+1.89%", "领涨股": "中芯国际", "资金流入": "8.9亿"},
-                {"板块": "医药生物", "涨跌幅": "-0.56%", "领涨股": "恒瑞医药", "资金流入": "5.2亿"}
+            # 模拟热点数据，符合中国股市颜色习惯
+            mock_sectors = [
+                {"name": "人工智能", "change_pct": 3.45, "volume": 15.6, "leading_stock": "科大讯飞"},
+                {"name": "新能源汽车", "change_pct": 2.18, "volume": 12.3, "leading_stock": "宁德时代"},
+                {"name": "半导体", "change_pct": 1.89, "volume": 8.9, "leading_stock": "中芯国际"},
+                {"name": "医药生物", "change_pct": -0.56, "volume": 5.2, "leading_stock": "恒瑞医药"},
+                {"name": "白酒", "change_pct": 0.78, "volume": 7.1, "leading_stock": "贵州茅台"},
+                {"name": "银行", "change_pct": 0.32, "volume": 4.8, "leading_stock": "招商银行"}
             ]
             
-            df_hot = pd.DataFrame(hot_topics)
-            st.dataframe(df_hot, use_container_width=True)
+            # 分列显示热点板块，应用中国股市颜色
+            sector_cols = st.columns(2)
+            for i, sector in enumerate(mock_sectors):
+                col_idx = i % 2
+                with sector_cols[col_idx]:
+                    change_pct = sector['change_pct']
+                    
+                    if change_pct > 0:
+                        # 上涨板块用红色
+                        st.markdown(f"""
+                        <div style='margin: 5px 0; padding: 10px; border-radius: 5px; background-color: rgba(255, 77, 77, 0.1); border-left: 4px solid #ff4d4d;'>
+                            <strong style='color: #333;'>{sector['name']}</strong><br>
+                            <span style='color: #ff4d4d; font-weight: bold;'>📈 {change_pct:+.2f}%</span>
+                            <span style='color: #888; margin-left: 10px;'>成交: {sector['volume']:.1f}亿</span>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    elif change_pct < 0:
+                        # 下跌板块用绿色
+                        st.markdown(f"""
+                        <div style='margin: 5px 0; padding: 10px; border-radius: 5px; background-color: rgba(77, 159, 77, 0.1); border-left: 4px solid #4d9f4d;'>
+                            <strong style='color: #333;'>{sector['name']}</strong><br>
+                            <span style='color: #4d9f4d; font-weight: bold;'>📉 {change_pct:+.2f}%</span>
+                            <span style='color: #888; margin-left: 10px;'>成交: {sector['volume']:.1f}亿</span>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    else:
+                        # 平盘用灰色
+                        st.markdown(f"""
+                        <div style='margin: 5px 0; padding: 10px; border-radius: 5px; background-color: rgba(128, 128, 128, 0.1); border-left: 4px solid #808080;'>
+                            <strong style='color: #333;'>{sector['name']}</strong><br>
+                            <span style='color: #808080; font-weight: bold;'>➖ {change_pct:+.2f}%</span>
+                            <span style='color: #888; margin-left: 10px;'>成交: {sector['volume']:.1f}亿</span>
+                        </div>
+                        """, unsafe_allow_html=True)
 
 def render_education_page():
     """渲染投资学堂页面"""

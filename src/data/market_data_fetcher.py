@@ -141,29 +141,42 @@ class MarketDataFetcher:
             # 尝试获取板块数据
             df = ak.stock_board_industry_name_em()
             
-            # 选取前几个活跃板块
+            # 选取前几个活跃板块，转换为UI需要的格式
             hot_sectors = []
-            for i in range(min(6, len(df))):
+            for i in range(min(8, len(df))):
                 row = df.iloc[i]
+                
+                # 解析涨跌幅数值
+                change_pct = 0.0
+                if pd.notna(row['涨跌幅']):
+                    change_pct = float(row['涨跌幅'])
+                
+                # 解析成交额为亿元单位
+                volume = 0.0
+                if pd.notna(row['总市值']):
+                    volume = float(row['总市值']) / 100000000  # 转换为亿元
+                
                 hot_sectors.append({
-                    '板块': row['板块名称'],
-                    '涨跌幅': f"{row['涨跌幅']:.2f}%" if pd.notna(row['涨跌幅']) else "0.00%",
-                    '领涨股': row['领涨股票'] if pd.notna(row['领涨股票']) else "暂无数据",
-                    '资金流入': f"{row['总市值'] / 100000000:.1f}亿" if pd.notna(row['总市值']) else "暂无数据"
+                    'name': row['板块名称'] if pd.notna(row['板块名称']) else "未知板块",
+                    'change_pct': change_pct,
+                    'volume': volume,
+                    'leading_stock': row['领涨股票'] if pd.notna(row['领涨股票']) else "暂无数据"
                 })
                 
             return hot_sectors
             
         except Exception as e:
             logger.warning(f"获取热门板块数据失败: {e}")
-            # 返回模拟数据
+            # 返回模拟数据，格式与UI匹配
             return [
-                {"板块": "人工智能", "涨跌幅": "+3.45%", "领涨股": "科大讯飞", "资金流入": "15.6亿"},
-                {"板块": "新能源汽车", "涨跌幅": "+2.18%", "领涨股": "宁德时代", "资金流入": "12.3亿"},
-                {"板块": "半导体", "涨跌幅": "+1.89%", "领涨股": "中芯国际", "资金流入": "8.9亿"},
-                {"板块": "医药生物", "涨跌幅": "-0.56%", "领涨股": "恒瑞医药", "资金流入": "5.2亿"},
-                {"板块": "白酒", "涨跌幅": "+0.78%", "领涨股": "贵州茅台", "资金流入": "7.1亿"},
-                {"板块": "银行", "涨跌幅": "+0.32%", "领涨股": "招商银行", "资金流入": "4.8亿"}
+                {"name": "人工智能", "change_pct": 3.45, "volume": 15.6, "leading_stock": "科大讯飞"},
+                {"name": "新能源汽车", "change_pct": 2.18, "volume": 12.3, "leading_stock": "宁德时代"},
+                {"name": "半导体", "change_pct": 1.89, "volume": 8.9, "leading_stock": "中芯国际"},
+                {"name": "医药生物", "change_pct": -0.56, "volume": 5.2, "leading_stock": "恒瑞医药"},
+                {"name": "白酒", "change_pct": 0.78, "volume": 7.1, "leading_stock": "贵州茅台"},
+                {"name": "银行", "change_pct": 0.32, "volume": 4.8, "leading_stock": "招商银行"},
+                {"name": "房地产", "change_pct": -1.23, "volume": 3.9, "leading_stock": "万科A"},
+                {"name": "5G通信", "change_pct": 2.67, "volume": 6.4, "leading_stock": "中兴通讯"}
             ]
     
     def get_market_overview(self) -> Dict:
