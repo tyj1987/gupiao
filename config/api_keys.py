@@ -3,7 +3,7 @@
 
 # Tushare Pro API Token
 # 注册地址: https://tushare.pro/register
-TUSHARE_TOKEN = "404fc281053152fd2af140644f201df82019df4973ea9878f95e6931"
+TUSHARE_TOKEN = "404fc281053152fd2af140644f201df82019df4973ea9878f95e6951"
 
 # 其他数据源API密钥（可选）
 # 如果有其他付费数据源，可以在这里配置
