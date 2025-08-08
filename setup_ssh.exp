@@ -1,0 +1,14 @@
+#!/usr/bin/expect -f
+set timeout 30
+spawn ssh-copy-id -i ~/.ssh/gupiao_deploy.pub root@47.94.225.76
+expect {
+    "password:" {
+        send "Tyj_198729\r"
+        exp_continue
+    }
+    "yes/no" {
+        send "yes\r"
+        exp_continue
+    }
+    eof
+}

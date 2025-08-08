@@ -162,95 +162,121 @@ class FeatureEngineer:
             volume = stock_data.get('vol', pd.Series(index=stock_data.index, data=1)).values
             
             # 检查talib是否可用
-            if hasattr(self, 'disabled_talib') and self.disabled_talib:
-                logger.debug("使用pandas替代talib计算技术指标")
-                return self._calculate_indicators_pandas(stock_data, features)
+            # 使用pandas实现技术指标
+            logger.debug("使用pandas计算技术指标")
             
             # 移动平均线
             for period in [5, 10, 20, 30, 60]:
                 if len(close) >= period:
-                    ma = talib.SMA(close, timeperiod=period)
+                    ma = close.rolling(window=period).mean()
                     features[f'ma_{period}'] = ma
                     features[f'ma_{period}_ratio'] = close / ma
             
             # 指数移动平均线
             for period in [12, 26]:
                 if len(close) >= period:
-                    ema = talib.EMA(close, timeperiod=period)
+                    ema = close.ewm(span=period).mean()
                     features[f'ema_{period}'] = ema
                     features[f'ema_{period}_ratio'] = close / ema
             
             # MACD
             if len(close) >= 34:
-                macd, macd_signal, macd_hist = talib.MACD(close, fastperiod=12, slowperiod=26, signalperiod=9)
+                ema12 = close.ewm(span=12).mean()
+                ema26 = close.ewm(span=26).mean()
+                macd = ema12 - ema26
+                macd_signal = macd.ewm(span=9).mean()
+                macd_hist = macd - macd_signal
                 features['macd'] = macd
                 features['macd_signal'] = macd_signal
                 features['macd_hist'] = macd_hist
-                features['macd_ratio'] = macd / macd_signal
+                # 避免除以零
+                features['macd_ratio'] = np.where(macd_signal != 0, macd / macd_signal, 0)
             
             # RSI
             for period in [6, 14, 24]:
                 if len(close) >= period + 1:
-                    rsi = talib.RSI(close, timeperiod=period)
+                    delta = close.diff()
+                    gain = delta.where(delta > 0, 0).rolling(window=period).mean()
+                    loss = (-delta).where(delta < 0, 0).rolling(window=period).mean()
+                    rs = gain / loss
+                    rsi = 100 - (100 / (1 + rs))
                     features[f'rsi_{period}'] = rsi
                     features[f'rsi_{period}_norm'] = (rsi - 50) / 50
             
             # 布林带
             if len(close) >= 20:
-                bb_upper, bb_middle, bb_lower = talib.BBANDS(close, timeperiod=20, nbdevup=2, nbdevdn=2)
+                bb_middle = close.rolling(window=20).mean()
+                bb_std = close.rolling(window=20).std()
+                bb_upper = bb_middle + (bb_std * 2)
+                bb_lower = bb_middle - (bb_std * 2)
                 features['bb_upper'] = bb_upper
                 features['bb_middle'] = bb_middle
                 features['bb_lower'] = bb_lower
                 features['bb_width'] = (bb_upper - bb_lower) / bb_middle
                 features['bb_position'] = (close - bb_lower) / (bb_upper - bb_lower)
             
-            # KDJ
+            # KDJ (简化版本)
             if len(close) >= 9:
-                k, d = talib.STOCH(high, low, close, fastk_period=9, slowk_period=3, slowd_period=3)
+                low_min = low.rolling(window=9).min()
+                high_max = high.rolling(window=9).max()
+                k = 100 * (close - low_min) / (high_max - low_min)
+                d = k.rolling(window=3).mean()
                 features['kdj_k'] = k
                 features['kdj_d'] = d
                 features['kdj_j'] = 3 * k - 2 * d
             
             # CCI
             if len(close) >= 14:
-                cci = talib.CCI(high, low, close, timeperiod=14)
+                tp = (high + low + close) / 3
+                cci = (tp - tp.rolling(window=14).mean()) / (0.015 * tp.rolling(window=14).std())
                 features['cci'] = cci
                 features['cci_norm'] = np.tanh(cci / 100)
             
             # Williams %R
             if len(close) >= 14:
-                willr = talib.WILLR(high, low, close, timeperiod=14)
+                high_max = high.rolling(window=14).max()
+                low_min = low.rolling(window=14).min()
+                willr = -100 * (high_max - close) / (high_max - low_min)
                 features['willr'] = willr
                 features['willr_norm'] = (willr + 50) / 50
             
             # ATR
             if len(close) >= 14:
-                atr = talib.ATR(high, low, close, timeperiod=14)
+                tr1 = high - low
+                tr2 = abs(high - close.shift(1))
+                tr3 = abs(low - close.shift(1))
+                tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+                atr = tr.rolling(window=14).mean()
                 features['atr'] = atr
                 features['atr_ratio'] = atr / close
             
             # OBV
             if len(close) >= 1:
-                obv = talib.OBV(close, volume)
+                obv = (volume * np.where(close.diff() > 0, 1, np.where(close.diff() < 0, -1, 0))).cumsum()
                 features['obv'] = obv
-                features['obv_ma'] = talib.SMA(obv, timeperiod=10) if len(obv) >= 10 else obv
+                features['obv_ma'] = obv.rolling(window=10).mean() if len(obv) >= 10 else obv
             
-            # ADX
+            # ADX (简化版本)
             if len(close) >= 14:
-                adx = talib.ADX(high, low, close, timeperiod=14)
+                tr1 = high - low
+                tr2 = abs(high - close.shift(1))
+                tr3 = abs(low - close.shift(1))
+                tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+                atr = tr.rolling(window=14).mean()
+                adx = atr / close * 100  # 简化版本
                 features['adx'] = adx
             
             # Momentum
             for period in [5, 10, 20]:
                 if len(close) >= period:
-                    mom = talib.MOM(close, timeperiod=period)
+                    mom = close - close.shift(period)
                     features[f'momentum_{period}'] = mom
                     features[f'momentum_{period}_norm'] = mom / close
             
             # ROC
             for period in [5, 10, 20]:
                 if len(close) >= period:
-                    roc = talib.ROC(close, timeperiod=period)
+                    roc = (close - close.shift(period)) / close.shift(period) * 100
                     features[f'roc_{period}'] = roc
             
             return features

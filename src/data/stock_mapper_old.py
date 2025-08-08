@@ -14,20 +14,11 @@ class StockMapper:
     """股票代码与名称映射器"""
     
     def __init__(self):
-        self.stock_mapping = self._init_stock_mapping()
+        self.stock_mapping = self._get_fallback_mapping()
         self.market_indices = self._init_market_indices()
         # 使用全市场股票获取器
         self.universal_fetcher = universal_stock_fetcher
         
-    def _init_stock_mapping(self) -> Dict[str, str]:
-        """初始化股票代码与名称的映射关系"""
-        # 从全市场获取器获取所有股票
-        try:
-            return self.universal_fetcher.get_all_stocks()
-        except Exception as e:
-            logger.error(f"获取全市场股票失败: {e}")
-            # 回退到基础映射
-            return self._get_fallback_mapping()
         
     def _get_fallback_mapping(self) -> Dict[str, str]:
         """获取回退映射（基础股票列表）"""
@@ -93,88 +84,6 @@ class StockMapper:
             "01024.HK": "快手-W",
             "00175.HK": "吉利汽车"
         }
-    
-    def _init_market_indices(self) -> Dict[str, str]:
-            '002466.SZ': '天齐锂业',
-            
-            # 消费股
-            '000895.SZ': '双汇发展',
-            '002032.SZ': '苏泊尔',
-            '600887.SH': '伊利股份',
-            '000568.SZ': '泸州老窖',
-            '002568.SZ': '百润股份',
-            '603288.SH': '海天味业',
-            '000333.SZ': '美的集团',
-            '000651.SZ': '格力电器',
-            '002304.SZ': '洋河股份',
-            '600298.SH': '安琪酵母',
-            
-            # 美股科技
-            'AAPL': '苹果公司',
-            'MSFT': '微软公司',
-            'GOOGL': '谷歌公司',
-            'META': 'Meta公司',
-            'NVDA': '英伟达公司',
-            'AMZN': '亚马逊公司',
-            'TSLA': '特斯拉公司',
-            'NFLX': '奈飞公司',
-            'ADBE': '奥多比公司',
-            'CRM': 'Salesforce公司',
-            
-            # 美股电动车
-            'RIVN': 'Rivian公司',
-            'LCID': 'Lucid Motors',
-            'NIO': '蔚来汽车',
-            'XPEV': '小鹏汽车',
-            'LI': '理想汽车',
-            'F': '福特汽车',
-            'GM': '通用汽车',
-            'PLUG': 'Plug Power',
-            'BLNK': 'Blink Charging',
-            'CHPT': 'ChargePoint',
-            
-            # 美股生物医药
-            'PFE': '辉瑞公司',
-            'JNJ': '强生公司',
-            'MRNA': 'Moderna公司',
-            'BNTX': 'BioNTech公司',
-            'GILD': '吉利德科学',
-            'AMGN': '安进公司',
-            'BIIB': 'Biogen公司',
-            'REGN': '再生元制药',
-            'VRTX': 'Vertex制药',
-            'ILMN': 'Illumina公司',
-            
-            # 美股金融
-            'JPM': '摩根大通',
-            'BAC': '美国银行',
-            'GS': '高盛集团',
-            'MS': '摩根士丹利',
-            'C': '花旗集团',
-            'WFC': '富国银行',
-            'AXP': '美国运通',
-            'V': 'Visa公司',
-            'MA': '万事达卡',
-            'BRK.B': '伯克希尔哈撒韦',
-            
-            # 美股消费
-            'KO': '可口可乐',
-            'PEP': '百事可乐',
-            'WMT': '沃尔玛',
-            'HD': '家得宝',
-            'MCD': '麦当劳',
-            'SBUX': '星巴克',
-            'NKE': '耐克公司',
-            'DIS': '迪士尼',
-            'COST': '好市多',
-            'TGT': '塔吉特'
-        }
-        
-        # 合并基础映射和完整股票池
-        combined_mapping = base_mapping.copy()
-        combined_mapping.update(comprehensive_stock_pool.get_all_stocks())
-        
-        return combined_mapping
     
     def _init_market_indices(self) -> Dict[str, str]:
         """初始化市场指数映射"""
@@ -384,17 +293,43 @@ class StockMapper:
     
     def get_stocks_by_industry(self, industry: str) -> Dict[str, str]:
         """根据行业获取股票列表"""
-        stock_codes = comprehensive_stock_pool.get_stocks_by_industry(industry)
-        return {code: comprehensive_stock_pool.get_stock_name(code) for code in stock_codes}
+        # 简化实现，返回所有股票中匹配行业关键词的
+        filtered_stocks = {}
+        industry_keywords = {
+            '消费': ['双汇', '苏泊尔', '伊利', '泸州', '百润', '海天', '美的', '格力', '洋河', '安琪'],
+            '科技': ['苹果', '微软', '谷歌', 'Meta', '英伟达', '亚马逊', '特斯拉', '奈飞', '奥多比'],
+            '电动车': ['Rivian', 'Lucid', '蔚来', '小鹏', '理想', '福特', '通用', 'Plug', 'Blink'],
+            '医药': ['辉瑞', '强生', 'Moderna', 'BioNTech', '吉利德', '安进', 'Biogen'],
+            '金融': ['摩根', '美国银行', '高盛', '花旗', '富国', '美国运通', 'Visa', '万事达']
+        }
+        
+        keywords = industry_keywords.get(industry, [])
+        for code, name in self.stock_mapping.items():
+            if any(keyword in name for keyword in keywords):
+                filtered_stocks[code] = name
+                
+        return filtered_stocks
     
     def get_blue_chip_stocks(self) -> Dict[str, str]:
         """获取蓝筹股列表"""
-        stock_codes = comprehensive_stock_pool.get_blue_chip_stocks()
-        return {code: comprehensive_stock_pool.get_stock_name(code) for code in stock_codes}
+        # 返回一些知名的蓝筹股
+        blue_chips = {
+            '000333.SZ': '美的集团',
+            '000651.SZ': '格力电器',
+            '600887.SH': '伊利股份',
+            'AAPL': '苹果公司',
+            'MSFT': '微软公司',
+            'GOOGL': '谷歌公司',
+            'JPM': '摩根大通',
+            'BAC': '美国银行'
+        }
+        return {code: name for code, name in blue_chips.items() if code in self.stock_mapping}
     
     def get_random_sample(self, count: int = 50) -> List[str]:
         """获取随机股票样本"""
-        return comprehensive_stock_pool.get_random_stocks(count)
+        import random
+        all_codes = list(self.stock_mapping.keys())
+        return random.sample(all_codes, min(count, len(all_codes)))
 
 # 全局实例
 stock_mapper = StockMapper()
