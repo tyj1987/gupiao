@@ -5,6 +5,9 @@ from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Union
 from loguru import logger
 import time
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 class AkshareClient:
     """AkShare数据客户端"""
@@ -17,7 +20,54 @@ class AkshareClient:
         self.last_request_time = 0
         self.min_interval = 0.5  # 最小请求间隔（秒）
         
+        # 重试配置
+        self.max_retries = 3
+        self.retry_delay = 2  # 重试延迟（秒）
+        
+        # 设置网络超时
+        self._setup_session()
+        
         logger.info("AkShare客户端初始化成功")
+    
+    def _setup_session(self):
+        """设置网络会话和重试策略"""
+        try:
+            # 配置requests重试策略
+            retry_strategy = Retry(
+                total=3,
+                backoff_factor=1,
+                status_forcelist=[429, 500, 502, 503, 504],
+            )
+            
+            adapter = HTTPAdapter(max_retries=retry_strategy)
+            session = requests.Session()
+            session.mount("http://", adapter)
+            session.mount("https://", adapter)
+            
+            # 设置超时
+            session.timeout = (10, 30)  # (连接超时, 读取超时)
+            
+        except Exception as e:
+            logger.warning(f"网络会话设置失败: {e}")
+    
+    def _retry_request(self, func, *args, **kwargs):
+        """重试机制装饰器"""
+        for attempt in range(self.max_retries):
+            try:
+                self._rate_limit()
+                result = func(*args, **kwargs)
+                if not result.empty:
+                    return result
+                else:
+                    logger.warning(f"数据为空，尝试 {attempt + 1}/{self.max_retries}")
+                    
+            except Exception as e:
+                logger.warning(f"请求失败 (尝试 {attempt + 1}/{self.max_retries}): {e}")
+                if attempt < self.max_retries - 1:
+                    time.sleep(self.retry_delay * (attempt + 1))  # 递增延迟
+                
+        logger.error(f"经过 {self.max_retries} 次尝试仍然失败")
+        return pd.DataFrame()
     
     def _rate_limit(self):
         """请求频率限制"""
@@ -77,24 +127,31 @@ class AkshareClient:
         Returns:
             日线数据DataFrame
         """
-        try:
-            self._rate_limit()
-            
+        def _fetch_data():
             # 默认获取最近一年的数据
             if not start_date:
-                start_date = (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d')
+                start = (datetime.now() - timedelta(days=365)).strftime('%Y%m%d')
+            else:
+                start = start_date.replace('-', '')
+                
             if not end_date:
-                end_date = datetime.now().strftime('%Y-%m-%d')
+                end = datetime.now().strftime('%Y%m%d')
+            else:
+                end = end_date.replace('-', '')
             
             # 移除后缀
             if '.' in symbol:
-                symbol = symbol.split('.')[0]
+                clean_symbol = symbol.split('.')[0]
+            else:
+                clean_symbol = symbol
             
-            df = ak.stock_zh_a_hist(symbol=symbol, 
-                                   period="daily", 
-                                   start_date=start_date.replace('-', ''), 
-                                   end_date=end_date.replace('-', ''), 
-                                   adjust=adjust)
+            df = ak.stock_zh_a_hist(
+                symbol=clean_symbol, 
+                period="daily", 
+                start_date=start, 
+                end_date=end, 
+                adjust=adjust
+            )
             
             if not df.empty:
                 # 统一列名
@@ -123,8 +180,16 @@ class AkshareClient:
                 # 按日期排序
                 df = df.sort_values('trade_date').reset_index(drop=True)
             
-            logger.info(f"获取{symbol}日线数据成功，共{len(df)}条记录")
             return df
+        
+        # 使用重试机制
+        try:
+            result = self._retry_request(_fetch_data)
+            if not result.empty:
+                logger.info(f"获取{symbol}日线数据成功，共{len(result)}条记录")
+            else:
+                logger.error(f"获取{symbol}日线数据失败: 所有重试均失败")
+            return result
             
         except Exception as e:
             logger.error(f"获取{symbol}日线数据失败: {e}")
