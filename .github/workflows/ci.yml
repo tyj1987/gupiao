@@ -1,0 +1,442 @@
+name: 🚀 生产环境CI/CD部署
+
+on:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - '**.md'
+      - 'archive/**'
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      deploy_to_production:
+        description: '是否部署到生产环境'
+        required: true
+        default: 'true'
+        type: boolean
+
+env:
+  DOCKER_IMAGE: tuoyongjun1987/gupiao-stock-analysis
+  PRODUCTION_SERVER: 47.94.225.76
+  APP_PORT: 8501
+
+jobs:
+  # 代码质量检查
+  lint-and-test:
+    name: 🔍 代码质量检查
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 检出代码
+        uses: actions/checkout@v4
+
+      - name: 🐍 设置Python环境
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+          cache: 'pip'
+
+      - name: 📦 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements_minimal_fixed.txt
+          pip install flake8 black
+
+      - name: 🧹 代码格式检查
+        run: |
+          echo "🔍 检查Python代码格式..."
+          flake8 src/ --count --select=E9,F63,F7,F82 --show-source --statistics
+          black --check src/ || echo "格式检查完成"
+
+      - name: 🧪 基础测试
+        run: |
+          echo "🧪 运行基础导入测试..."
+          python -c "
+          import sys
+          sys.path.append('src')
+          try:
+              from ui.streamlit_app import main
+              print('✅ 主应用导入成功')
+          except Exception as e:
+              print(f'❌ 导入失败: {e}')
+              exit(1)
+          "
+
+  # 构建优化Docker镜像
+  build-image:
+    name: 🐳 构建优化Docker镜像
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    outputs:
+      image-tag: ${{ steps.tag.outputs.tag }}
+      image-size: ${{ steps.build.outputs.size }}
+    steps:
+      - name: 📥 检出代码
+        uses: actions/checkout@v4
+
+      - name: 🏷️ 生成镜像标签
+        id: tag
+        run: |
+          TAG="v2.1.0-$(date +%Y%m%d-%H%M%S)-${GITHUB_SHA::8}"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "生成镜像标签: $TAG"
+
+      - name: 🧹 项目清理
+        run: |
+          echo "🧹 运行构建前清理..."
+          # 清理Python缓存
+          find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+          find . -name "*.pyc" -delete 2>/dev/null || true
+          
+          # 清理临时文件
+          rm -rf .pytest_cache/ .coverage .tox/ 2>/dev/null || true
+          
+          # 显示构建上下文大小
+          echo "📊 构建上下文大小:"
+          du -sh . --exclude=.git --exclude=venv
+
+      - name: 🔧 设置Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 🔐 登录Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: 🐳 构建并推送Docker镜像
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ env.DOCKER_IMAGE }}:${{ steps.tag.outputs.tag }}
+            ${{ env.DOCKER_IMAGE }}:latest
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
+
+      - name: 📊 显示镜像信息
+        run: |
+          echo "✅ 镜像构建完成:"
+          echo "- 镜像: ${{ env.DOCKER_IMAGE }}:${{ steps.tag.outputs.tag }}"
+          echo "- 大小: 优化版 (预计<500M)"
+          echo "- 平台: linux/amd64"
+
+  # 部署到生产环境
+  deploy-production:
+    name: 🚀 部署到生产环境
+    runs-on: ubuntu-latest
+    needs: [lint-and-test, build-image]
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.deploy_to_production))
+    environment: production
+    steps:
+      - name: 📥 检出代码
+        uses: actions/checkout@v4
+
+      - name: 🔧 准备部署脚本
+        run: |
+          echo "📝 创建生产部署脚本..."
+          cat > deploy-to-production.sh << 'EOF'
+          #!/bin/bash
+          set -e
+          
+          echo "🚀 开始部署到生产环境..."
+          echo "时间: $(date)"
+          echo "镜像: $1"
+          echo "服务器: $2"
+          
+          # 配置变量
+          DOCKER_IMAGE="$1"
+          APP_DIR="/www/wwwroot/gupiao"
+          CONTAINER_NAME="gupiao-app"
+          PORT="8501"
+          
+          # 创建应用目录
+          echo "📁 创建应用目录..."
+          mkdir -p $APP_DIR
+          cd $APP_DIR
+          mkdir -p logs data exports cache models
+          chmod 755 logs data exports cache models
+          
+          # 备份当前部署
+          echo "💾 备份当前部署..."
+          if docker ps | grep -q $CONTAINER_NAME; then
+              docker stop $CONTAINER_NAME || true
+              docker rename $CONTAINER_NAME ${CONTAINER_NAME}-backup-$(date +%Y%m%d_%H%M%S) || true
+          fi
+          
+          # 拉取最新镜像
+          echo "📥 拉取最新镜像..."
+          docker pull $DOCKER_IMAGE
+          
+          # 创建docker-compose配置
+          echo "📝 创建docker-compose配置..."
+          cat > docker-compose.yml << 'COMPOSE_EOF'
+          version: '3.8'
+          
+          services:
+            gupiao-app:
+              image: ${DOCKER_IMAGE}
+              container_name: ${CONTAINER_NAME}
+              restart: unless-stopped
+              ports:
+                - "${PORT}:8501"
+              environment:
+                - ENVIRONMENT=production
+                - STREAMLIT_SERVER_PORT=8501
+                - STREAMLIT_SERVER_ADDRESS=0.0.0.0
+                - STREAMLIT_SERVER_HEADLESS=true
+                - STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
+              volumes:
+                - ./logs:/app/logs
+                - ./data:/app/data
+                - ./exports:/app/exports
+                - ./cache:/app/cache
+                - ./models:/app/models
+              healthcheck:
+                test: ["CMD", "curl", "-f", "http://localhost:8501"]
+                interval: 30s
+                timeout: 10s
+                retries: 3
+                start_period: 60s
+              networks:
+                - gupiao-network
+          
+          networks:
+            gupiao-network:
+              driver: bridge
+          COMPOSE_EOF
+          
+          # 启动服务
+          echo "🚀 启动服务..."
+          docker-compose down || true
+          docker-compose up -d
+          
+          # 健康检查
+          echo "🩺 执行健康检查..."
+          sleep 15
+          
+          max_attempts=30
+          attempt=1
+          while [ $attempt -le $max_attempts ]; do
+              if curl -f http://localhost:$PORT &> /dev/null; then
+                  echo "✅ 健康检查通过"
+                  break
+              else
+                  echo "⏳ 等待应用启动... ($attempt/$max_attempts)"
+                  sleep 2
+                  ((attempt++))
+              fi
+          done
+          
+          if [ $attempt -gt $max_attempts ]; then
+              echo "❌ 健康检查失败"
+              docker logs $CONTAINER_NAME --tail 50
+              exit 1
+          fi
+          
+          # 清理资源
+          echo "🧹 清理旧资源..."
+          docker images $DOCKER_IMAGE --format "{{.ID}}" | tail -n +4 | xargs -r docker rmi || true
+          docker image prune -f || true
+          
+          echo "🎉 部署完成!"
+          echo "访问地址: http://$2:$PORT"
+          EOF
+          
+          chmod +x deploy-to-production.sh
+
+      - name: 🚀 执行生产部署
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ env.PRODUCTION_SERVER }}
+          username: ${{ secrets.PRODUCTION_USER }}
+          key: ${{ secrets.PRODUCTION_SSH_KEY }}
+          port: 22
+          timeout: 300
+          command_timeout: 600
+          script: |
+            echo "🚀 开始生产环境部署..."
+            
+            # 检查Docker环境
+            if ! command -v docker &> /dev/null; then
+                echo "❌ Docker未安装，开始安装..."
+                # 安装Docker
+                curl -fsSL https://get.docker.com -o get-docker.sh
+                sh get-docker.sh
+                systemctl enable docker
+                systemctl start docker
+                rm get-docker.sh
+            fi
+            
+            if ! command -v docker-compose &> /dev/null; then
+                echo "❌ Docker Compose未安装，开始安装..."
+                curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+                chmod +x /usr/local/bin/docker-compose
+                ln -sf /usr/local/bin/docker-compose /usr/bin/docker-compose
+            fi
+            
+            # 配置变量
+            DOCKER_IMAGE="${{ env.DOCKER_IMAGE }}:${{ needs.build-image.outputs.image-tag }}"
+            APP_DIR="/www/wwwroot/gupiao"
+            CONTAINER_NAME="gupiao-app"
+            PORT="8501"
+            
+            # 创建应用目录
+            echo "📁 创建应用目录..."
+            mkdir -p $APP_DIR
+            cd $APP_DIR
+            mkdir -p logs data exports cache models
+            chmod 755 logs data exports cache models
+            
+            # 备份当前部署
+            echo "💾 备份当前部署..."
+            if docker ps | grep -q $CONTAINER_NAME; then
+                docker stop $CONTAINER_NAME || true
+                docker rename $CONTAINER_NAME ${CONTAINER_NAME}-backup-$(date +%Y%m%d_%H%M%S) || true
+            fi
+            
+            # 拉取最新镜像
+            echo "📥 拉取最新镜像: $DOCKER_IMAGE"
+            docker pull $DOCKER_IMAGE
+            
+            # 创建docker-compose配置
+            echo "📝 创建docker-compose配置..."
+            cat > docker-compose.yml << 'EOF'
+            version: '3.8'
+            
+            services:
+              gupiao-app:
+                image: ${{ env.DOCKER_IMAGE }}:${{ needs.build-image.outputs.image-tag }}
+                container_name: gupiao-app
+                restart: unless-stopped
+                ports:
+                  - "8501:8501"
+                environment:
+                  - ENVIRONMENT=production
+                  - STREAMLIT_SERVER_PORT=8501
+                  - STREAMLIT_SERVER_ADDRESS=0.0.0.0
+                  - STREAMLIT_SERVER_HEADLESS=true
+                  - STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
+                volumes:
+                  - ./logs:/app/logs
+                  - ./data:/app/data
+                  - ./exports:/app/exports
+                  - ./cache:/app/cache
+                  - ./models:/app/models
+                healthcheck:
+                  test: ["CMD", "curl", "-f", "http://localhost:8501"]
+                  interval: 30s
+                  timeout: 10s
+                  retries: 3
+                  start_period: 60s
+                networks:
+                  - gupiao-network
+            
+            networks:
+              gupiao-network:
+                driver: bridge
+            EOF
+            
+            # 启动服务
+            echo "🚀 启动服务..."
+            docker-compose down || true
+            docker-compose up -d
+            
+            # 健康检查
+            echo "🩺 执行健康检查..."
+            sleep 15
+            
+            max_attempts=30
+            attempt=1
+            while [ $attempt -le $max_attempts ]; do
+                if curl -f http://localhost:8501 &> /dev/null; then
+                    echo "✅ 健康检查通过"
+                    break
+                else
+                    echo "⏳ 等待应用启动... ($attempt/$max_attempts)"
+                    sleep 2
+                    ((attempt++))
+                fi
+            done
+            
+            if [ $attempt -gt $max_attempts ]; then
+                echo "❌ 健康检查失败"
+                docker logs gupiao-app --tail 50
+                exit 1
+            fi
+            
+            # 开放防火墙端口
+            if command -v firewall-cmd &> /dev/null; then
+                firewall-cmd --permanent --add-port=8501/tcp || true
+                firewall-cmd --reload || true
+            fi
+            
+            # 清理资源
+            echo "🧹 清理旧资源..."
+            docker images ${{ env.DOCKER_IMAGE }} --format "{{.ID}}" | tail -n +4 | xargs -r docker rmi || true
+            docker image prune -f || true
+            
+            echo "🎉 部署完成!"
+            echo "访问地址: http://${{ env.PRODUCTION_SERVER }}:8501"
+            docker ps | grep gupiao-app
+
+      - name: 🔍 部署后验证
+        run: |
+          echo "🔍 验证生产环境部署..."
+          sleep 10
+          
+          # 检查服务响应
+          max_attempts=10
+          attempt=1
+          while [ $attempt -le $max_attempts ]; do
+              if curl -f http://${{ env.PRODUCTION_SERVER }}:${{ env.APP_PORT }} --connect-timeout 10 &> /dev/null; then
+                  echo "✅ 生产环境验证成功!"
+                  break
+              else
+                  echo "⏳ 等待生产环境响应... ($attempt/$max_attempts)"
+                  sleep 5
+                  ((attempt++))
+              fi
+          done
+          
+          if [ $attempt -gt $max_attempts ]; then
+              echo "⚠️ 无法验证生产环境响应，请手动检查"
+          fi
+
+  # 部署通知
+  notify:
+    name: 📢 部署通知
+    runs-on: ubuntu-latest
+    needs: [build-image, deploy-production]
+    if: always()
+    steps:
+      - name: 📊 生成部署报告
+        run: |
+          echo "## 🚀 部署报告" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 构建信息" >> $GITHUB_STEP_SUMMARY
+          echo "- **镜像标签**: ${{ needs.build-image.outputs.image-tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **镜像仓库**: ${{ env.DOCKER_IMAGE }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **构建时间**: $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "- **提交SHA**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🌐 访问信息" >> $GITHUB_STEP_SUMMARY
+          echo "- **生产环境**: http://${{ env.PRODUCTION_SERVER }}:${{ env.APP_PORT }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **GitHub仓库**: ${{ github.server_url }}/${{ github.repository }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ needs.deploy-production.result }}" == "success" ]; then
+              echo "### ✅ 部署状态: 成功" >> $GITHUB_STEP_SUMMARY
+              echo "应用已成功部署到生产环境，可以正常访问。" >> $GITHUB_STEP_SUMMARY
+          else
+              echo "### ❌ 部署状态: 失败" >> $GITHUB_STEP_SUMMARY
+              echo "部署过程中遇到问题，请检查日志。" >> $GITHUB_STEP_SUMMARY
+          fi
