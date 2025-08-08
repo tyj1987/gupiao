@@ -1,13 +1,13 @@
 # =============================================
-# 股票AI分析系统 Docker镜像忽略文件
+# 股票AI分析系统 Docker镜像忽略文件 - 精简版
 # =============================================
 
-# Git相关
+# Git 和版本控制
 .git/
 .gitignore
 .github/
 
-# Python相关
+# Python 缓存和构建文件
 __pycache__/
 *.py[cod]
 *$py.class
@@ -28,17 +28,26 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-# IDE和编辑器
+
+# 虚拟环境（完全排除）
+venv/
+env/
+ENV/
+.venv/
+.env/
+
+# IDE 和编辑器
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# 操作系统文件
+# 系统文件
 .DS_Store
 Thumbs.db
 desktop.ini
+*.Zone.Identifier
 
 # 临时文件和备份
 *.tmp
@@ -54,7 +63,7 @@ desktop.ini
 logs/
 log/
 
-# 缓存和数据文件  
+# 缓存和数据文件（运行时生成）  
 cache/
 .cache/
 data/
@@ -79,18 +88,16 @@ coverage.xml
 .hypothesis/
 .junit/
 
-# 文档和README（保留README.md）
-docs/
+# 文档和说明文件（保留核心文档）
 *.md
 !README.md
-!CHANGELOG.md
 
-# 部署相关
-deploy/
-deployment/
+# 部署和开发文件
 scripts/
+archive/
 *.tar.gz
 *.zip
+*.rar
 
 # 开发工具文件
 .env.local
@@ -103,31 +110,31 @@ scripts/
 config/api_keys.py
 .streamlit/secrets.toml
 
-# 存档文件
-archive/
-
 # 测试文件
-*test*.py
+test_*.py
+*_test.py
 functional_test.py
 local_test.py
+debug_*.py
+demo_*.py
 
-# 管理脚本
+# 开发脚本
 *.sh
 !healthcheck.sh
 
-# Docker相关
+# Docker 相关
 docker-compose*.yml
-Dockerfile*
+Dockerfile.*
+!Dockerfile
 .dockerignore
 
-# Nginx配置
+# Nginx 配置
 nginx.conf
 
-# 部署相关
-deploy.sh
-manage.sh
-check_environment.sh
-*.tar.gz
+# 备用依赖文件
+requirements_*.txt
+!requirements_minimal_fixed.txt
 
-# 配置文件（敏感信息）
-config/api_keys.py
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb

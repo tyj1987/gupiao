@@ -1,46 +1,44 @@
-# 股票AI分析系统 - 使用最小化依赖
+# =============================================
+# 股票AI分析系统 - 精简版 Dockerfile
 # 构建者: tyj1987 <tuoyongjun1987@qq.com>
-# 版本: 2.1.0
+# 版本: 2.1.1 (优化版)
+# =============================================
 
+# 使用 Python 3.9 slim 镜像作为基础
 FROM python:3.9-slim
 
 # 设置工作目录
 WORKDIR /app
 
 # 设置环境变量
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV STREAMLIT_SERVER_PORT=8501
-ENV STREAMLIT_SERVER_ADDRESS=0.0.0.0
-ENV STREAMLIT_SERVER_HEADLESS=true
-ENV STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    STREAMLIT_SERVER_PORT=8501 \
+    STREAMLIT_SERVER_ADDRESS=0.0.0.0 \
+    STREAMLIT_SERVER_HEADLESS=true \
+    STREAMLIT_BROWSER_GATHER_USAGE_STATS=false \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# 安装系统依赖（包含TA-Lib编译依赖）
-RUN apt-get update && apt-get install -y \
-    gcc \
-    g++ \
+# 一次性安装系统依赖并清理
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
-    wget \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
-# 安装TA-Lib C库
-RUN wget http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz \
-    && tar -xzf ta-lib-0.4.0-src.tar.gz \
-    && cd ta-lib \
-    && ./configure --prefix=/usr \
-    && make && make install \
-    && cd .. && rm -rf ta-lib ta-lib-0.4.0-src.tar.gz
-
-# 复制最小化依赖文件
+# 复制并安装 Python 依赖
 COPY requirements_minimal_fixed.txt .
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir -r requirements_minimal_fixed.txt && \
+    pip cache purge
 
-# 安装Python依赖
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements_minimal_fixed.txt
+# 复制应用核心文件
+COPY src/ ./src/
+COPY config/ ./config/
+COPY .streamlit/ ./.streamlit/
 
-# 复制应用代码
-COPY . .
+# 创建必要的目录
+RUN mkdir -p logs cache data exports
 
 # 暴露端口
 EXPOSE 8501
@@ -49,5 +47,9 @@ EXPOSE 8501
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:8501/_stcore/health || exit 1
 
-# 运行应用
-CMD ["streamlit", "run", "src/ui/streamlit_app.py", "--server.port=8501", "--server.address=0.0.0.0", "--server.headless=true"]
+# 启动应用
+CMD ["python", "-m", "streamlit", "run", "src/ui/streamlit_app.py", \
+     "--server.address", "0.0.0.0", \
+     "--server.port", "8501", \
+     "--server.headless", "true", \
+     "--browser.gatherUsageStats", "false"]

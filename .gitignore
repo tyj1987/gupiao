@@ -1,9 +1,8 @@
-# =============================================================================
-# 股票分析系统 .gitignore 文件
-# 防止提交不必要的文件到Git仓库
-# =============================================================================
+# =============================================
+# 股票分析系统 .gitignore - 精简版
+# =============================================
 
-# Python相关
+# Python 相关
 __pycache__/
 *.py[cod]
 *$py.class
@@ -21,21 +20,19 @@ parts/
 sdist/
 var/
 wheels/
-pip-wheel-metadata/
-share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
 MANIFEST
 
-# 虚拟环境
+# 虚拟环境 (完全忽略)
 venv/
 env/
 ENV/
 .venv/
 .env/
 
-# IDE和编辑器
+# IDE 和编辑器
 .vscode/
 .idea/
 *.swp
@@ -47,13 +44,14 @@ ENV/
 
 # 系统文件
 .DS_Store
-.DS_Store?
 ._*
 .Spotlight-V100
 .Trashes
 ehthumbs.db
 Thumbs.db
 *.Zone.Identifier
+Desktop.ini
+$RECYCLE.BIN/
 
 # 日志文件
 *.log
@@ -89,17 +87,26 @@ coverage.xml
 config.ini
 settings.local.py
 secrets.json
+config/api_keys.py
+.streamlit/secrets.toml
 
-# 数据文件
+# 数据和缓存文件
 *.csv
 *.xlsx
 *.xls
 *.json
-data/cache/
-data/temp/
+data/
+cache/
+exports/
+models/
 *.db
 *.sqlite
 *.sqlite3
+*.pkl
+*.pickle
+*.joblib
+*.h5
+*.model
 
 # 文档构建
 docs/_build/
@@ -109,38 +116,49 @@ site/
 .ipynb_checkpoints
 *.ipynb
 
-# 机器学习模型
-*.pkl
-*.pickle
-*.joblib
-*.h5
-*.model
-
-# Docker
-.dockerignore.backup
-
-# 部署相关
-*.pid
-*.seed
-*.pid.lock
+# Docker 构建上下文中的大文件
+*.tar.gz
+*.zip
+*.rar
 
 # 包管理
 Pipfile.lock
 poetry.lock
 
-# MacOS
-.AppleDouble
-.LSOverride
-
-# Windows
-Desktop.ini
-$RECYCLE.BIN/
-
-# Linux
-*~
-
 # 项目特定忽略
-archive/temp/
+archive/
 scripts/temp/
 old_versions/
 deprecated/
+
+# 开发和测试文件
+test_*.py
+*_test.py
+functional_test.py
+local_test.py
+debug_*.py
+demo_*.py
+
+# 临时脚本和备份
+*fix*.sh
+*test*.sh
+*debug*.sh
+*temp*.sh
+cleanup*.sh
+quick_*.sh
+deploy-test*.sh
+push-and-*.sh
+
+# 备用配置文件
+requirements_*.txt
+!requirements.txt
+!requirements_minimal_fixed.txt
+docker-compose.*.yml
+Dockerfile.*
+!Dockerfile
+
+# 部署相关临时文件
+*.pid
+*.seed
+*.pid.lock
+deployment_*.log

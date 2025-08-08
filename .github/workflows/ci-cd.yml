@@ -60,6 +60,36 @@ jobs:
     - name: 检出代码
       uses: actions/checkout@v4
       
+    - name: 项目清理优化
+      run: |
+        echo "🧹 清理项目以减少镜像大小..."
+        
+        # 清理Python缓存
+        find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+        find . -type f -name "*.pyc" -delete 2>/dev/null || true
+        find . -type f -name "*.pyo" -delete 2>/dev/null || true
+        
+        # 清理临时文件
+        find . -type f -name "*.tmp" -delete 2>/dev/null || true
+        find . -type f -name "*.bak" -delete 2>/dev/null || true
+        find . -type f -name "*.log" -delete 2>/dev/null || true
+        find . -type f -name "*~" -delete 2>/dev/null || true
+        
+        # 清理系统文件
+        find . -type f -name ".DS_Store" -delete 2>/dev/null || true
+        find . -type f -name "Thumbs.db" -delete 2>/dev/null || true
+        find . -type f -name "*.Zone.Identifier" -delete 2>/dev/null || true
+        
+        # 清理数据目录（保持结构）
+        rm -rf data/* cache/* logs/* exports/* models/* 2>/dev/null || true
+        touch data/.gitkeep cache/.gitkeep logs/.gitkeep exports/.gitkeep models/.gitkeep
+        
+        # 显示清理后的大小
+        echo "📊 清理后的构建上下文大小:"
+        du -sh . 2>/dev/null || echo "无法计算大小"
+        
+        echo "✅ 项目清理完成"
+      
     - name: 设置Docker Buildx
       uses: docker/setup-buildx-action@v3
       
