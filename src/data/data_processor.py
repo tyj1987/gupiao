@@ -31,6 +31,63 @@ class DataProcessor:
         """
         logger.info("数据处理器初始化成功")
     
+    def standardize_data_source(self, df: pd.DataFrame, source: str = 'unknown') -> pd.DataFrame:
+        """
+        标准化不同数据源的数据格式，减少差异
+        
+        Args:
+            df: 原始数据DataFrame
+            source: 数据源标识 ('tushare', 'akshare', 'yfinance')
+            
+        Returns:
+            标准化后的DataFrame
+        """
+        if df.empty:
+            return df
+            
+        try:
+            standardized_df = df.copy()
+            
+            # 标准化日期列
+            if 'trade_date' in standardized_df.columns:
+                standardized_df.index = pd.to_datetime(standardized_df['trade_date'])
+            elif 'date' in standardized_df.columns:
+                standardized_df.index = pd.to_datetime(standardized_df['date'])
+            
+            # 确保索引是datetime类型
+            if not isinstance(standardized_df.index, pd.DatetimeIndex):
+                if standardized_df.index.name in ['trade_date', 'date']:
+                    standardized_df.index = pd.to_datetime(standardized_df.index)
+            
+            # 标准化数值精度
+            numeric_columns = ['open', 'high', 'low', 'close', 'pre_close']
+            for col in numeric_columns:
+                if col in standardized_df.columns:
+                    standardized_df[col] = pd.to_numeric(standardized_df[col], errors='coerce').round(2)
+            
+            # 标准化成交量单位 (统一为手)
+            vol_columns = ['vol', 'volume']
+            for col in vol_columns:
+                if col in standardized_df.columns:
+                    # Tushare的成交量单位是万手，转换为手
+                    if source.lower() == 'tushare' and col == 'vol':
+                        standardized_df[col] = standardized_df[col] * 10000
+                    standardized_df[col] = pd.to_numeric(standardized_df[col], errors='coerce').astype('Int64')
+            
+            # 标准化涨跌幅精度
+            if 'pct_chg' in standardized_df.columns:
+                standardized_df['pct_chg'] = pd.to_numeric(standardized_df['pct_chg'], errors='coerce').round(2)
+            
+            # 添加数据源标记
+            standardized_df['data_source'] = source
+            
+            logger.debug(f"数据源{source}标准化完成，共{len(standardized_df)}条记录")
+            return standardized_df
+            
+        except Exception as e:
+            logger.warning(f"数据源标准化失败: {e}")
+            return df
+    
     def clean_data(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         清洗数据
