@@ -29,8 +29,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 复制并安装 Python 依赖
 COPY requirements_minimal_fixed.txt .
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir -r requirements_minimal_fixed.txt && \
-    pip cache purge
+    pip install --no-cache-dir -r requirements_minimal_fixed.txt
 
 # 复制应用核心文件
 COPY src/ ./src/
