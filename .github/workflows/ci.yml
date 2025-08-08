@@ -260,8 +260,8 @@ jobs:
           username: ${{ secrets.PRODUCTION_USER }}
           key: ${{ secrets.PRODUCTION_SSH_KEY }}
           port: 22
-          timeout: 300
-          command_timeout: 600
+          timeout: 300s
+          command_timeout: 600s
           script: |
             echo "🚀 开始生产环境部署..."
             
