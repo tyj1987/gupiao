@@ -455,7 +455,6 @@ def render_stock_analysis_page(symbol, period):
     try:
         from src.ui.smart_stock_input import smart_stock_input, display_stock_info
         from src.data.data_fetcher import DataFetcher
-        import streamlit as st
         import time
         # 添加使用提示
         st.info("� **搜索提示**: 支持股票代码(如: 000001)、完整名称(如: 平安银行)或简称(如: 中行)的模糊搜索")
@@ -2197,11 +2196,12 @@ def main():
     
     # 根据选择渲染对应页面
     if page == "📊 股票分析":
-        symbol, period = page_info[1], page_info[2]
-        if symbol:
-            render_stock_analysis_page(symbol, period)
-        else:
+        symbol = page_info[1] if len(page_info) > 1 and page_info[1] else "000001.SZ"
+        period = page_info[2] if len(page_info) > 2 and page_info[2] else "1y"
+        if not symbol:
             st.info("请在侧边栏输入股票代码开始分析")
+            return
+        render_stock_analysis_page(symbol, period)
     
     elif page == "🎯 智能选股":
         render_stock_screening_page()
