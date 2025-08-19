@@ -454,17 +454,34 @@ def render_stock_analysis_page(symbol, period):
     # 使用智能股票输入组件
     try:
         from src.ui.smart_stock_input import smart_stock_input, display_stock_info
-        
+        from src.data.data_fetcher import DataFetcher
+        import streamlit as st
+        import time
         # 添加使用提示
         st.info("� **搜索提示**: 支持股票代码(如: 000001)、完整名称(如: 平安银行)或简称(如: 中行)的模糊搜索")
-        
         # 智能股票选择
         symbol, name = smart_stock_input(
             label="🔍 选择要分析的股票",
             default_symbol=symbol,
             key="stock_analysis"
         )
-        
+        # 实时报价展示（自动刷新）
+        from streamlit_autorefresh import st_autorefresh
+        st_autorefresh(interval=15 * 1000, key="realtime_quote_refresh")
+        st.markdown("---")
+        st.markdown(f"### 🕒 实时行情（AkShare）: {symbol}")
+        fetcher = DataFetcher()
+        quote = fetcher.get_realtime_quote(symbol)
+        if 'error' in quote:
+            st.error(f"实时行情获取失败: {quote['error']}")
+        else:
+            col1, col2, col3, col4, col5 = st.columns(5)
+            col1.metric("最新价", f"{quote['last']}")
+            col2.metric("涨跌幅", f"{quote['pct_change']}%")
+            col3.metric("成交量", f"{quote['volume']}")
+            col4.metric("成交额", f"{quote['amount']}")
+            col5.metric("更新时间", quote['ts'])
+        st.markdown("---")
         # 显示股票信息卡片
         display_stock_info(symbol, name)
         

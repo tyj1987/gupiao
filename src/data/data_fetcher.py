@@ -20,6 +20,20 @@ except ImportError:
     logger.warning("YFinance不可用，国际股票数据功能将被禁用")
 
 class DataFetcher:
+    def get_realtime_quote(self, symbol: str) -> Dict:
+        """
+        获取A股实时行情（AkShare）
+        Args:
+            symbol: 股票代码（如 000001.SZ）
+        Returns:
+            dict: 实时行情数据
+        """
+        try:
+            from .realtime_quote import get_realtime_quote
+            return get_realtime_quote(symbol)
+        except Exception as e:
+            logger.warning(f"实时报价获取失败: {e}")
+            return {'error': str(e)}
     """统一数据获取器"""
     
     def __init__(self, use_cache: bool = True):

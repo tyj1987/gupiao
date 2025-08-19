@@ -13,6 +13,7 @@ tushare==1.2.89
 akshare==1.17.29
 requests==2.31.0
 yfinance==0.2.22
+streamlit-autorefresh
 
 # 机器学习
 scikit-learn==1.3.2

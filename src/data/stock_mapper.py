@@ -101,7 +101,75 @@ class StockMapper:
             '^IXIC': '纳斯达克指数'
         }
     
-    def get_stock_name(self, symbol: str) -> str:
+    from functools import lru_cache
+
+    @lru_cache(maxsize=1)
+    def get_all_stocks(self) -> Dict[str, str]:
+        return self.stock_mapping
+
+    @lru_cache(maxsize=128)
+    def _local_search(self, query: str, limit: int = 10) -> List[Dict[str, str]]:
+        # 原始实现拷贝
+        query_original = query.strip()
+        query = query.upper().strip()
+        results = []
+        if not query:
+            return results
+        search_aliases = {
+            '中行': '中国银行',
+            '工行': '工商银行', 
+            '建行': '建设银行',
+            '招行': '招商银行',
+            '茅台': '贵州茅台',
+            '五粮': '五粮液'
+        }
+        search_term = query_original
+        for alias, full_name in search_aliases.items():
+            if alias in query_original:
+                search_term = full_name
+                break
+        for symbol, name in self.stock_mapping.items():
+            match_score = 0
+            match_type = 'none'
+            if query == symbol.upper():
+                match_score = 100
+                match_type = 'exact_code'
+            elif query in symbol.upper():
+                match_score = 90
+                match_type = 'code'
+            elif search_term == name:
+                match_score = 85
+                match_type = 'exact_name'
+            elif search_term in name or query in name:
+                match_score = 80
+                match_type = 'name'
+            elif any(word in name for word in search_term.split() if len(word) > 1):
+                match_score = 70
+                match_type = 'fuzzy'
+            if match_score > 0:
+                if symbol.endswith('.SH') or symbol.endswith('.SZ'):
+                    market = '上海A股' if symbol.endswith('.SH') else '深圳A股'
+                elif symbol.endswith('.HK'):
+                    market = '香港H股'
+                else:
+                    market = '美股'
+                results.append({
+                    'symbol': symbol,
+                    'name': name,
+                    'match_type': match_type,
+                    'market': market,
+                    'score': match_score
+                })
+        results.sort(key=lambda x: (-x['score'], x['symbol']))
+        final_results = []
+        for r in results[:limit]:
+            final_results.append({
+                'symbol': r['symbol'],
+                'name': r['name'],
+                'match_type': r['match_type'],
+                'market': r.get('market', '未知市场')
+            })
+        return final_results
         """根据股票代码获取股票名称"""
         return self.stock_mapping.get(symbol.upper(), symbol)
     
